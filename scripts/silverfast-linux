@@ -1,0 +1,394 @@
+#!/usr/bin/env bash
+# silverfast-linux: install and run SilverFast 9 for Windows under Wine, with
+# USB scanner access through silverfast-usbd. See README.md and
+# docs/how-it-works.md.
+set -euo pipefail
+
+VERSION=0.1.0
+
+# --- locations -------------------------------------------------------------
+DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
+SFL_HOME=${SFL_HOME:-$DATA_HOME/silverfast-linux}
+CACHE_DIR=${SFL_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/silverfast-linux}
+export WINEPREFIX=${SFL_PREFIX:-$SFL_HOME/prefix}
+export WINEARCH=win64
+FIRMWARE_DIR=$SFL_HOME/firmware
+LOG_DIR=$SFL_HOME/logs
+SOCKET=${SFL_USBD_SOCKET:-${XDG_RUNTIME_DIR:-/tmp/silverfast-linux-$UID}/silverfast-linux/usbd.sock}
+DESKTOP_FILE=$DATA_HOME/applications/silverfast-linux.desktop
+
+APP_DIR_WIN='C:\Program Files\SilverFast Application\SilverFast 9'
+APP_DIR=$WINEPREFIX/drive_c/Program\ Files/SilverFast\ Application/SilverFast\ 9
+PROGRAMDATA_DIR=$WINEPREFIX/drive_c/ProgramData/LaserSoft\ Imaging/SilverFast\ 9
+ICC_DIR=$WINEPREFIX/drive_c/windows/system32/spool/drivers/color
+SYSTEM32=$WINEPREFIX/drive_c/windows/system32
+
+# Our own build outputs: next to an installed script, or in a source checkout.
+SCRIPT_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+if [ -f "$SCRIPT_DIR/../lib/silverfast-linux/sti.dll" ]; then
+    LIB_DIR=$(cd "$SCRIPT_DIR/../lib/silverfast-linux" && pwd)
+    STI_DLL=$LIB_DIR/sti.dll USBD=$LIB_DIR/silverfast-usbd
+    COMPONENTS=$LIB_DIR/components.txt UDEV_RULE=$LIB_DIR/70-silverfast-linux.rules
+else
+    ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+    STI_DLL=$ROOT/build/sti.dll USBD=$ROOT/build/silverfast-usbd
+    COMPONENTS=$ROOT/scripts/components.txt UDEV_RULE=$ROOT/udev/70-silverfast-linux.rules
+fi
+
+# --- vendor sources --------------------------------------------------------
+# SilverFast 9 is published as a Qt Installer Framework repository. The
+# release index points at the current versioned repository; every archive
+# has a .sha1 next to it. Only the Windows build is used.
+SF_RELEASE_INDEX=https://cdn9.silverfast.com/release/sf9/win/Updates.xml
+# Epson Scan 3.9.3.3 for the Perfection V600, only two files are used from it.
+EPSON_URL=https://ftp.epson.com/drivers/EPSONScan_PerV600_3933_41_Signed.exe
+EPSON_SHA256=1ec32dcc16813c4070fb5c7ffb01506fe5a20197f2eb098c5deac5fab18a2b62
+EPSON_DLL_SHA256=76c49ca15c3cc824f35ee90261a17145504117e0b9a9460289eac364dc608323
+EPSON_FW_SHA256=3fde1787469c5cc3624743da6be2671ee297d07ba3fa8439d9d9408631cd8bc3
+
+SF_VERSION=
+SCANNER_VID=04b8 SCANNER_PID=013a SCANNER_NAME="EPSON Perfection V600"
+
+# --- output helpers --------------------------------------------------------
+if [ -t 1 ]; then B=$'\e[1m' G=$'\e[32m' Y=$'\e[33m' R=$'\e[31m' N=$'\e[0m'; else B='' G='' Y='' R='' N=''; fi
+step() { printf '%s==>%s %s\n' "$B" "$N" "$*"; }
+ok()   { printf '  %s✓%s %s\n' "$G" "$N" "$*"; }
+warn() { printf '  %s!%s %s\n' "$Y" "$N" "$*" >&2; }
+die()  { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+
+quiet_wine() { WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=;winemenubuilder.exe=d;${WINEDLLOVERRIDES:-}" "$@"; }
+
+usage() {
+    cat <<EOF
+silverfast-linux $VERSION - SilverFast 9 on Linux through Wine
+
+usage: silverfast-linux <command> [options]
+
+commands:
+  install --accept-vendor-licenses
+                 download SilverFast 9 and the Epson V600 driver from their
+                 vendors and set up a dedicated Wine prefix
+  run            start the USB helper and SilverFast
+  doctor         check that everything needed for scanning is in place
+  udev           print the commands that grant USB access to the scanner
+  uninstall [--purge]
+                 remove the Wine prefix (--purge also drops the download cache)
+  version        print the version
+
+environment:
+  SFL_HOME       data directory (default: $DATA_HOME/silverfast-linux)
+  SFL_VERBOSE=1  log every USB transfer to $LOG_DIR/usbd.log
+EOF
+}
+
+need() { command -v "$1" >/dev/null 2>&1 || die "'$1' is required but not installed${2:+ ($2)}"; }
+
+check_tools() {
+    need wine "install Wine 9 or newer"
+    need wineserver
+    need curl
+    need 7z "install p7zip / 7zip"
+    need python3
+    need sha1sum
+    need sha256sum
+    [ -f "$STI_DLL" ] && [ -x "$USBD" ] || die "build outputs missing ($STI_DLL, $USBD); run 'make' or 'make container' first"
+    local v; v=$(wine --version 2>/dev/null | sed -n 's/^wine-\([0-9]*\).*/\1/p')
+    [ -n "$v" ] && [ "$v" -ge 9 ] || die "Wine 9 or newer is required (found: $(wine --version 2>/dev/null))"
+}
+
+# download URL DEST [SHA1|-] [SHA256|-]
+download() {
+    local url=$1 dest=$2 sha1=${3:--} sha256=${4:--}
+    if [ -f "$dest" ] && verify "$dest" "$sha1" "$sha256" 2>/dev/null; then return 0; fi
+    mkdir -p "$(dirname "$dest")"
+    local progress=-sS
+    [ -t 1 ] && progress=--progress-bar
+    curl -fL --retry 3 "$progress" -o "$dest.part" "$url" || die "download failed: $url"
+    mv "$dest.part" "$dest"
+    verify "$dest" "$sha1" "$sha256" || { rm -f "$dest"; die "checksum mismatch for $url"; }
+}
+
+verify() {
+    local f=$1 sha1=$2 sha256=$3
+    if [ "$sha1" != - ]; then [ "$(sha1sum "$f" | cut -d' ' -f1)" = "$sha1" ] || return 1; fi
+    if [ "$sha256" != - ]; then [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$sha256" ] || return 1; fi
+    return 0
+}
+
+# --- install ---------------------------------------------------------------
+create_prefix() {
+    step "Creating Wine prefix in $WINEPREFIX"
+    if [ -f "$WINEPREFIX/system.reg" ]; then ok "prefix exists"; return; fi
+    mkdir -p "$WINEPREFIX"
+    quiet_wine wineboot -i >/dev/null 2>&1 || die "wineboot failed"
+    quiet_wine wineserver -w
+    ok "prefix created"
+}
+
+# Prints "<component> <version> <archive> <sha1-url-base>" for every wanted archive.
+resolve_silverfast() {
+    local index repo
+    index=$(curl -fsSL "$SF_RELEASE_INDEX") || die "cannot reach LaserSoft's download server"
+    repo=$(printf '%s' "$index" | python3 -c '
+import sys, xml.etree.ElementTree as E
+for r in E.fromstring(sys.stdin.read()).iter("Repository"):
+    print(r.get("url")); break')
+    [ -n "$repo" ] || die "unexpected SilverFast release index format"
+    repo=${repo/https:\/\/cdn.silverfast.com\/9\//https://cdn9.silverfast.com/}
+    curl -fsSL "$repo/Updates.xml" | python3 -c '
+import sys, xml.etree.ElementTree as E
+wanted = {}
+for line in open(sys.argv[1]):
+    line = line.split("#")[0].split()
+    if line: wanted[line[0]] = line[1]
+repo = sys.argv[2]
+for p in E.fromstring(sys.stdin.read()).iter("PackageUpdate"):
+    name, ver = p.findtext("Name").strip(), p.findtext("Version").strip()
+    if name not in wanted: continue
+    for a in (p.findtext("DownloadableArchives") or "").split(","):
+        if a.strip(): print(name, wanted[name], f"{repo}/{name}/{ver}{a.strip()}")
+' "$COMPONENTS" "$repo"
+}
+
+dest_dir() {
+    case $1 in
+        app) printf '%s' "$APP_DIR" ;;
+        icc) printf '%s' "$ICC_DIR" ;;
+        programdata/*) printf '%s/%s' "$PROGRAMDATA_DIR" "${1#programdata/}" ;;
+        *) die "unknown destination '$1' in $COMPONENTS" ;;
+    esac
+}
+
+install_silverfast() {
+    step "Downloading SilverFast 9 from LaserSoft"
+    local list name dest url file sha1 n=0
+    list=$(resolve_silverfast)
+    [ -n "$list" ] || die "no SilverFast components found"
+    SF_VERSION=$(printf '%s\n' "$list" | head -1 | sed -n 's|.*/version/\([^/]*\)/.*|\1|p')
+    ok "release ${SF_VERSION:-unknown}"
+    while read -r name dest url; do
+        file=$CACHE_DIR/silverfast/$name/$(basename "$url")
+        sha1=$(curl -fsSL "$url.sha1" | cut -c1-40) || die "missing checksum for $url"
+        download "$url" "$file" "$sha1"
+        mkdir -p "$(dest_dir "$dest")"
+        7z x -y -bso0 -bsp0 -o"$(dest_dir "$dest")" "$file" || die "cannot extract $file"
+        n=$((n + 1))
+    done <<< "$list"
+    mkdir -p "$PROGRAMDATA_DIR/Drivers" "$PROGRAMDATA_DIR/AIModels"
+    ok "$n archives verified and extracted"
+
+    step "Installing the Visual C++ runtime bundled with SilverFast"
+    quiet_wine wine "$APP_DIR/vc_redist.x64.exe" /quiet /norestart >/dev/null 2>&1 || true
+    quiet_wine wineserver -w
+    [ -f "$SYSTEM32/msvcp140.dll" ] && ok "runtime installed" || warn "VC++ runtime may be missing"
+}
+
+install_epson() {
+    step "Downloading the Epson V600 driver (for its interpreter and firmware)"
+    local exe tmp
+    exe=$CACHE_DIR/epson/$(basename "$EPSON_URL")
+    download "$EPSON_URL" "$exe" - "$EPSON_SHA256"
+    tmp=$(mktemp -d)
+    7z e -y -bso0 -bsp0 -o"$tmp" "$exe" '*/ModUsd.cab' || die "cannot unpack Epson driver"
+    7z e -y -bso0 -bsp0 -o"$tmp" "$tmp/ModUsd.cab" EsxuinA1.dll EsfwA1.bin || die "cannot unpack ModUsd.cab"
+    verify "$tmp/EsxuinA1.dll" - "$EPSON_DLL_SHA256" && verify "$tmp/EsfwA1.bin" - "$EPSON_FW_SHA256" \
+        || { rm -rf "$tmp"; die "unexpected Epson file contents"; }
+    install -Dm644 "$tmp/EsxuinA1.dll" "$SYSTEM32/esxuina1.dll"
+    install -Dm644 "$tmp/EsfwA1.bin" "$FIRMWARE_DIR/esfwa1.bin"
+    rm -rf "$tmp"
+    ok "interpreter esxuina1.dll and firmware esfwa1.bin installed"
+}
+
+install_bridge() {
+    step "Installing the sti.dll replacement and device registration"
+    install -Dm644 "$STI_DLL" "$SYSTEM32/sti.dll"
+    local reg; reg=$(mktemp --suffix=.reg)
+    cat > "$reg" <<EOF
+REGEDIT4
+
+[HKEY_CURRENT_USER\\Software\\Wine\\DllOverrides]
+"sti"="native"
+
+[HKEY_LOCAL_MACHINE\\SOFTWARE\\LaserSoft Imaging\\SilverFast 9]
+"x64_path"="${APP_DIR_WIN//\\/\\\\}"
+"x64_Version"="${SF_VERSION:-9}"
+"x64_Stamp"="$(date +%s)000"
+
+[HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000]
+"DriverDesc"="$SCANNER_NAME"
+"FriendlyName"="$SCANNER_NAME"
+"Vendor"="EPSON"
+"ProviderName"="EPSON"
+"SubClass"="StillImage"
+"DeviceID"="{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\\\0000"
+"MatchingDeviceId"="usb\\\\vid_${SCANNER_VID}&pid_${SCANNER_PID}"
+"InfPath"="esa1.inf"
+"InfSection"="ES00A1_NTx64_60"
+"DeviceType"=dword:00000001
+"DeviceSubType"=dword:00000001
+"Capabilities"=dword:00000013
+"HardwareConfig"=dword:00000004
+"CreateFileName"="\\\\\\\\.\\\\Usbscan0"
+
+[HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000\\DeviceData]
+"Model"="$SCANNER_NAME"
+"ModelCode"="ES00A1"
+"HOptRes"="6400,1"
+"VOptRes"="9600,1"
+"ExtCmdModule"="esxuina1.dll"
+"ExtBinModule"="esfwa1.bin"
+EOF
+    quiet_wine wine regedit /S "$(quiet_wine winepath -w "$reg")" || die "registry import failed"
+    quiet_wine wineserver -w
+    rm -f "$reg"
+    ok "scanner registered as $SCANNER_NAME"
+}
+
+install_desktop_entry() {
+    step "Adding a desktop entry"
+    mkdir -p "$(dirname "$DESKTOP_FILE")"
+    cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=SilverFast 9
+Comment=Scan with SilverFast 9 (via Wine)
+Exec=$(readlink -f "$0") run
+Icon=scanner
+Categories=Graphics;Scanning;
+Terminal=false
+EOF
+    ok "$DESKTOP_FILE"
+}
+
+cmd_install() {
+    local accepted=0
+    for a in "$@"; do [ "$a" = --accept-vendor-licenses ] && accepted=1; done
+    if [ $accepted = 0 ]; then
+        cat <<EOF
+silverfast-linux downloads proprietary software directly from its vendors:
+  - SilverFast 9 by LaserSoft Imaging AG     https://www.silverfast.com
+  - Epson Scan driver for the Perfection V600 https://epson.com/Support
+Using them means accepting their licence terms. Nothing from either vendor is
+redistributed by this project. SilverFast itself still needs your own
+MySilverFast licence to scan.
+
+Re-run with --accept-vendor-licenses to continue.
+EOF
+        exit 1
+    fi
+    check_tools
+    mkdir -p "$SFL_HOME" "$CACHE_DIR" "$LOG_DIR"
+    create_prefix
+    install_silverfast
+    install_epson
+    install_bridge
+    install_desktop_entry
+    step "Done"
+    usb_access_ok || { warn "the scanner is not accessible yet; run 'silverfast-linux udev' for the fix"; }
+    echo "Start SilverFast with: silverfast-linux run"
+}
+
+# --- run -------------------------------------------------------------------
+# Prints the /dev/bus/usb node of the scanner, if connected.
+scanner_node() {
+    local d
+    for d in /sys/bus/usb/devices/*; do
+        [ -f "$d/idVendor" ] || continue
+        [ "$(cat "$d/idVendor")" = "$SCANNER_VID" ] && [ "$(cat "$d/idProduct")" = "$SCANNER_PID" ] || continue
+        printf '/dev/bus/usb/%03d/%03d\n' "$(cat "$d/busnum")" "$(cat "$d/devnum")"
+        return 0
+    done
+    return 1
+}
+
+usb_access_ok() {
+    local node; node=$(scanner_node) || return 0  # not connected: nothing to check
+    [ -r "$node" ] && [ -w "$node" ]
+}
+
+helper_running() {
+    python3 - "$SOCKET" <<'EOF' 2>/dev/null
+import socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(1)
+s.connect(sys.argv[1])
+EOF
+}
+
+cmd_run() {
+    [ -f "$APP_DIR/SilverFast 9.exe" ] || die "SilverFast is not installed; run 'silverfast-linux install' first"
+    mkdir -p "$LOG_DIR" "$(dirname "$SOCKET")"
+    chmod 700 "$(dirname "$SOCKET")"
+    if ! scanner_node >/dev/null; then warn "$SCANNER_NAME is not connected; SilverFast will start without it"
+    elif ! usb_access_ok; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
+
+    HELPER_PID=
+    if helper_running; then
+        ok "silverfast-usbd already running"
+    else
+        "$USBD" --firmware-dir "$FIRMWARE_DIR" --socket "$SOCKET" --log "$LOG_DIR/usbd.log" \
+            ${SFL_VERBOSE:+--verbose} &
+        HELPER_PID=$!
+        trap '[ -n "$HELPER_PID" ] && kill "$HELPER_PID" 2>/dev/null; wait 2>/dev/null' EXIT
+        for _ in $(seq 100); do [ -S "$SOCKET" ] && break; sleep 0.1; done
+        [ -S "$SOCKET" ] || die "silverfast-usbd did not start; see $LOG_DIR/usbd.log"
+    fi
+
+    export SFL_USBD_SOCKET=$SOCKET
+    export SFL_STI_LOG; SFL_STI_LOG=$(WINEDEBUG=-all winepath -w "$LOG_DIR/sti.log" 2>/dev/null)
+    export WINEDLLOVERRIDES="sti=n;winemenubuilder.exe=d;${WINEDLLOVERRIDES:-}"
+    export WINEDEBUG=${WINEDEBUG:--all}
+    cd "$APP_DIR"
+    wine "SilverFast 9.exe" "$@" >>"$LOG_DIR/wine.log" 2>&1 || true
+    wineserver -w
+}
+
+# --- doctor ----------------------------------------------------------------
+cmd_doctor() {
+    local fails=0
+    check() { if eval "$2"; then ok "$1"; else warn "$1 — $3"; fails=$((fails + 1)); fi; }
+    step "silverfast-linux $VERSION doctor"
+    check "wine available ($(wine --version 2>/dev/null || echo none))" 'command -v wine >/dev/null' "install Wine 9+"
+    check "helper binary" '[ -x "$USBD" ]' "run make"
+    check "sti.dll build" '[ -f "$STI_DLL" ]' "run make"
+    check "Wine prefix" '[ -f "$WINEPREFIX/system.reg" ]' "run silverfast-linux install"
+    check "SilverFast installed" '[ -f "$APP_DIR/SilverFast 9.exe" ]' "run silverfast-linux install"
+    check "SilverFast data folders" '[ -d "$PROGRAMDATA_DIR/Prefs" ] && [ -d "$PROGRAMDATA_DIR/NegaFix" ]' "re-run install"
+    check "sti.dll installed in prefix" 'cmp -s "$STI_DLL" "$SYSTEM32/sti.dll"' "re-run install"
+    check "Epson interpreter" '[ -f "$SYSTEM32/esxuina1.dll" ]' "re-run install"
+    check "V600 firmware" '[ -f "$FIRMWARE_DIR/esfwa1.bin" ]' "re-run install"
+    check "scanner connected" 'scanner_node >/dev/null' "plug in and switch on the V600"
+    check "scanner accessible" 'usb_access_ok' "run 'silverfast-linux udev'"
+    check "helper socket directory" '[ -n "${XDG_RUNTIME_DIR:-}" ]' "XDG_RUNTIME_DIR unset; using /tmp"
+    [ $fails = 0 ] && step "All good" || { step "$fails problem(s) found"; return 1; }
+}
+
+cmd_udev() {
+    cat <<EOF
+Run these commands once to let your user open the scanner over USB:
+
+  sudo install -m644 "$UDEV_RULE" /etc/udev/rules.d/
+  sudo udevadm control --reload && sudo udevadm trigger
+
+Then unplug and replug the scanner (or switch it off and on).
+EOF
+}
+
+cmd_uninstall() {
+    step "Removing $SFL_HOME"
+    WINEDEBUG=-all wineserver -k 2>/dev/null || true
+    rm -rf "$SFL_HOME" "$DESKTOP_FILE"
+    if [ "${1:-}" = --purge ]; then rm -rf "$CACHE_DIR"; ok "download cache removed"; fi
+    ok "removed"
+}
+
+case ${1:-} in
+    install)   shift; cmd_install "$@" ;;
+    run)       shift; cmd_run "$@" ;;
+    doctor)    cmd_doctor ;;
+    udev)      cmd_udev ;;
+    uninstall) shift; cmd_uninstall "$@" ;;
+    version)   echo "$VERSION" ;;
+    -h|--help|help|"") usage ;;
+    *) usage; exit 1 ;;
+esac
