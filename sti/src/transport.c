@@ -1,5 +1,6 @@
 #include <winsock2.h>
 #include <afunix.h>
+#include <ws2tcpip.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,27 +101,51 @@ static HRESULT exchange(char op, const void *payload, DWORD len, void *out, DWOR
     return status ? errno_to_hresult(status) : S_OK;
 }
 
-static HRESULT connect_locked(void)
+/* AF_UNIX sockets only exist in Wine Staging; fall through to TCP elsewhere. */
+static BOOL connect_unix(void)
 {
     SOCKADDR_UN addr = { .sun_family = AF_UNIX };
-    char desc[128];
-    DWORD desc_len = sizeof(desc) - 1;
+
+    if (!socket_path(addr.sun_path, sizeof(addr.sun_path))) return FALSE;
+    sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock != INVALID_SOCKET && !connect(sock, (struct sockaddr *)&addr, sizeof(addr))) return TRUE;
+    sfl_log("transport: unix socket %s unavailable (error %d)", addr.sun_path, WSAGetLastError());
+    drop_connection();
+    return FALSE;
+}
+
+/* $SFL_USBD_TCP holds the loopback port the helper listens on. */
+static BOOL connect_tcp(void)
+{
+    struct sockaddr_in addr = { .sin_family = AF_INET };
+    char port[16];
+    DWORD n = GetEnvironmentVariableA("SFL_USBD_TCP", port, sizeof(port));
+
+    if (!n || n >= sizeof(port) || !(addr.sin_port = htons((u_short)atoi(port)))) return FALSE;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sock != INVALID_SOCKET && !connect(sock, (struct sockaddr *)&addr, sizeof(addr))) return TRUE;
+    sfl_log("transport: 127.0.0.1:%s unavailable (error %d)", port, WSAGetLastError());
+    drop_connection();
+    return FALSE;
+}
+
+static HRESULT connect_locked(void)
+{
+    char desc[128], hello[4 + 128];
+    DWORD desc_len = sizeof(desc) - 1, token_len;
     HRESULT hr;
 
     if (sock != INVALID_SOCKET) return S_OK;
-    if (!socket_path(addr.sun_path, sizeof(addr.sun_path)))
+    if (!connect_unix() && !connect_tcp())
     {
-        sfl_log("transport: no socket path (set SFL_USBD_SOCKET or XDG_RUNTIME_DIR)");
+        sfl_log("transport: cannot reach silverfast-usbd; is it running?");
         return HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_CONNECTED);
     }
-    sock = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sock == INVALID_SOCKET || connect(sock, (struct sockaddr *)&addr, sizeof(addr)))
-    {
-        sfl_log("transport: cannot reach silverfast-usbd at %s (error %d)", addr.sun_path, WSAGetLastError());
-        drop_connection();
-        return HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_CONNECTED);
-    }
-    hr = exchange(SFL_OP_HELLO, SFL_PROTOCOL_MAGIC, 4, desc, &desc_len);
+    memcpy(hello, SFL_PROTOCOL_MAGIC, 4);
+    token_len = GetEnvironmentVariableA("SFL_USBD_TOKEN", hello + 4, sizeof(hello) - 4);
+    if (token_len >= sizeof(hello) - 4) token_len = 0;
+    hr = exchange(SFL_OP_HELLO, hello, 4 + token_len, desc, &desc_len);
     if (FAILED(hr)) { sfl_log("transport: helper reports no usable scanner (%08lx)", hr); drop_connection(); return hr; }
     desc[desc_len] = 0;
     sfl_log("transport: connected to %s", desc);

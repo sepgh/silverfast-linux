@@ -38,7 +38,7 @@ flowchart LR
         INT -->|"read/write callbacks"| SFJ
         STI --> REG[("registry:<br/>Image device class")]
     end
-    STI -->|"Unix socket<br/>$XDG_RUNTIME_DIR/silverfast-linux/usbd.sock"| USBD["silverfast-usbd<br/>(this project, Linux)"]
+    STI -->|"Unix socket (Wine Staging)<br/>or loopback TCP + token"| USBD["silverfast-usbd<br/>(this project, Linux)"]
     USBD -->|"libusb bulk transfers"| SCN["Epson V600"]
     USBD -. "firmware upload<br/>on first open" .-> SCN
 ```
@@ -129,8 +129,15 @@ This only writes to the scanner's RAM; nothing is flashed. It is implemented in
 
 - opens the first supported scanner (`helper/src/models.h`), claims interface 0
   and runs the firmware check/upload;
-- serves one client at a time on a Unix socket in a `0700` directory under
-  `$XDG_RUNTIME_DIR`, so other users cannot drive your scanner;
+- serves one client at a time on two endpoints, both in or announced through
+  a `0700` directory under `$XDG_RUNTIME_DIR/silverfast-linux/`:
+  - a Unix socket (`usbd.sock`), used by Wine Staging, which supports
+    `AF_UNIX`;
+  - a loopback TCP port on `127.0.0.1` (written to `usbd.port`), used by
+    mainline Wine, which does not support `AF_UNIX`;
+- requires a per-session random token (`usbd.token`, mode `0600`) in the first
+  message of every connection. The launcher creates it and passes it to Wine in
+  `SFL_USBD_TOKEN`; without it, other local users could reach the TCP port;
 - reads in whole 512-byte packets. SilverFast asks for exact byte counts, but
   the V600 sometimes sends more than requested; an exact-size bulk read then
   fails with an overflow error and, after enough errors, the scanner resets
@@ -140,7 +147,8 @@ This only writes to the scanner's RAM; nothing is flashed. It is implemented in
 
 The wire protocol is in `helper/src/protocol.h`: a 5-byte header
 (`op`, little-endian length), then the payload; every request gets an 8-byte
-reply (status as negative errno, length) followed by data.
+reply (status as negative errno, length) followed by data. The first request
+must be `HELLO` with `SFL1` followed by the token.
 
 ## Installing SilverFast without its installer
 
@@ -183,8 +191,11 @@ replace the helper without touching the rest.
 **A native Linux helper over a Unix socket.** A Windows DLL cannot call libusb
 directly, and building a Wine-internal "unixlib" DLL ties the project to Wine's
 internal build system and versions. A separate process talking over a socket
-works with any Wine ≥ 9 from any distribution. Wine supports `AF_UNIX`
-sockets with plain Unix paths, so no TCP port is opened.
+works with any Wine ≥ 9 from any distribution. Wine Staging supports
+`AF_UNIX` sockets with plain Unix paths; mainline Wine does not (the support
+is a Staging patch set), so the helper also listens on loopback TCP. A random
+per-session token stops other local users from using that port. `sti.dll`
+tries the Unix socket first and falls back to TCP.
 
 **Upload the firmware ourselves.** Running Epson's WIA driver would require the
 whole WIA service under Wine. The upload is short and well understood, so the

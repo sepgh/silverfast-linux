@@ -14,7 +14,10 @@ export WINEPREFIX=${SFL_PREFIX:-$SFL_HOME/prefix}
 export WINEARCH=win64
 FIRMWARE_DIR=$SFL_HOME/firmware
 LOG_DIR=$SFL_HOME/logs
-SOCKET=${SFL_USBD_SOCKET:-${XDG_RUNTIME_DIR:-/tmp/silverfast-linux-$UID}/silverfast-linux/usbd.sock}
+RUN_DIR=${XDG_RUNTIME_DIR:-/tmp/silverfast-linux-$UID}/silverfast-linux
+SOCKET=$RUN_DIR/usbd.sock         # used by Wine Staging (AF_UNIX)
+PORT_FILE=$RUN_DIR/usbd.port      # loopback TCP fallback for mainline Wine
+TOKEN_FILE=$RUN_DIR/usbd.token    # session secret; RUN_DIR is mode 0700
 DESKTOP_FILE=$DATA_HOME/applications/silverfast-linux.desktop
 
 APP_DIR_WIN='C:\Program Files\SilverFast Application\SilverFast 9'
@@ -317,24 +320,28 @@ EOF
 
 cmd_run() {
     [ -f "$APP_DIR/SilverFast 9.exe" ] || die "SilverFast is not installed; run 'silverfast-linux install' first"
-    mkdir -p "$LOG_DIR" "$(dirname "$SOCKET")"
-    chmod 700 "$(dirname "$SOCKET")"
+    mkdir -p "$LOG_DIR" "$RUN_DIR"
+    chmod 700 "$RUN_DIR"
     if ! scanner_node >/dev/null; then warn "$SCANNER_NAME is not connected; SilverFast will start without it"
     elif ! usb_access_ok; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
 
     HELPER_PID=
-    if helper_running; then
+    if helper_running && [ -s "$TOKEN_FILE" ] && [ -s "$PORT_FILE" ]; then
         ok "silverfast-usbd already running"
     else
-        "$USBD" --firmware-dir "$FIRMWARE_DIR" --socket "$SOCKET" --log "$LOG_DIR/usbd.log" \
-            ${SFL_VERBOSE:+--verbose} &
+        rm -f "$PORT_FILE"
+        (umask 077; od -An -N16 -tx1 /dev/urandom | tr -d ' \n' > "$TOKEN_FILE")
+        SFL_USBD_TOKEN=$(cat "$TOKEN_FILE") "$USBD" --firmware-dir "$FIRMWARE_DIR" --socket "$SOCKET" \
+            --tcp-port-file "$PORT_FILE" --log "$LOG_DIR/usbd.log" ${SFL_VERBOSE:+--verbose} &
         HELPER_PID=$!
-        trap '[ -n "$HELPER_PID" ] && kill "$HELPER_PID" 2>/dev/null; wait 2>/dev/null' EXIT
-        for _ in $(seq 100); do [ -S "$SOCKET" ] && break; sleep 0.1; done
-        [ -S "$SOCKET" ] || die "silverfast-usbd did not start; see $LOG_DIR/usbd.log"
+        trap '[ -n "$HELPER_PID" ] && kill "$HELPER_PID" 2>/dev/null; wait 2>/dev/null; rm -f "$TOKEN_FILE"' EXIT
+        for _ in $(seq 100); do [ -S "$SOCKET" ] && [ -s "$PORT_FILE" ] && break; sleep 0.1; done
+        [ -S "$SOCKET" ] && [ -s "$PORT_FILE" ] || die "silverfast-usbd did not start; see $LOG_DIR/usbd.log"
     fi
 
-    export SFL_USBD_SOCKET=$SOCKET
+    export SFL_USBD_SOCKET=$SOCKET SFL_USBD_TCP SFL_USBD_TOKEN
+    SFL_USBD_TCP=$(cat "$PORT_FILE")
+    SFL_USBD_TOKEN=$(cat "$TOKEN_FILE")
     export SFL_STI_LOG; SFL_STI_LOG=$(WINEDEBUG=-all winepath -w "$LOG_DIR/sti.log" 2>/dev/null)
     export WINEDLLOVERRIDES="sti=n;winemenubuilder.exe=d;${WINEDLLOVERRIDES:-}"
     export WINEDEBUG=${WINEDEBUG:--all}

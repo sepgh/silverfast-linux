@@ -65,8 +65,11 @@ SilverFast 9.exe ─ sfjpeg.dll ─┬─ esxuina1.dll (Epson interpreter)
   `GetStatus` reports online if the helper answers.
 - Exports `StiCreateInstance`, `StiCreateInstanceW`, `StiCreateInstanceA`
   (unsupported), and the COM `Dll*` entry points.
-- `transport.c`: one connection to the helper, guarded by a critical section;
-  socket path from `SFL_USBD_SOCKET` or `$XDG_RUNTIME_DIR/silverfast-linux/usbd.sock`.
+- `transport.c`: one connection to the helper, guarded by a critical section.
+  Tries the Unix socket (`SFL_USBD_SOCKET`, else
+  `$XDG_RUNTIME_DIR/silverfast-linux/usbd.sock`) and falls back to loopback TCP
+  (`SFL_USBD_TCP` port), because `AF_UNIX` is only available in Wine Staging.
+  Sends the session token from `SFL_USBD_TOKEN` in `HELLO`.
 - Logs to `SFL_STI_LOG` if set.
 
 **`silverfast-usbd`** (C, libusb-1.0)
@@ -75,7 +78,10 @@ SilverFast 9.exe ─ sfjpeg.dll ─┬─ esxuina1.dll (Epson interpreter)
 - Serves one client at a time; protocol in `helper/src/protocol.h`.
 - Packet-aligned receive buffer; 30 s I/O timeout.
 - On `ENODEV` closes and reopens the device (re-uploading firmware).
-- Socket in a `0700` directory; refuses to start if another instance answers.
+- Unix socket in a `0700` directory plus a `127.0.0.1` TCP listener on a
+  kernel-chosen port (`--tcp-port-file`); every connection must start with
+  `HELLO` carrying the token from `$SFL_USBD_TOKEN`, otherwise it is closed
+  with `EACCES`. Refuses to start if another instance answers.
 
 **`silverfast-linux`** (bash)
 - `install --accept-vendor-licenses`: dedicated prefix in
@@ -85,8 +91,9 @@ SilverFast 9.exe ─ sfjpeg.dll ─┬─ esxuina1.dll (Epson interpreter)
   firmware directory (both pinned); `sti.dll` + override; registry
   (STI device, LaserSoft keys); desktop entry. Downloads are cached in
   `~/.cache/silverfast-linux`.
-- `run`: warns about a missing/inaccessible scanner, starts the helper unless
-  one is already serving, launches SilverFast, waits for Wine to exit, stops the
+- `run`: warns about a missing/inaccessible scanner, creates a random session
+  token, starts the helper unless one is already serving, exports the socket,
+  port and token to Wine, launches SilverFast, waits for Wine to exit, stops the
   helper.
 - `doctor`, `udev`, `uninstall [--purge]`, `version`.
 
@@ -115,7 +122,8 @@ the two commands `silverfast-linux udev` prints.
 
 - Unit (`make test`): firmware preparation/upload sequence, receive buffer.
 - Integration: `sti_selftest.exe` under a throwaway Wine prefix against
-  `tests/mock_usbd.py`.
+  `tests/mock_usbd.py`, over TCP always and over the Unix socket when the Wine
+  build supports `AF_UNIX`.
 - CI: build both binaries, run unit tests and the Wine self-test on every push.
 - Hardware checklist (manual, V600):
   1. `silverfast-linux doctor` all green.
@@ -130,5 +138,6 @@ the two commands `silverfast-linux udev` prints.
   move the driver URL. Both surface as clear install/run errors.
 - **Licensing.** Users must accept LaserSoft's and Epson's terms; the installer
   requires an explicit flag and links to the vendors.
-- **Wine regressions** in `AF_UNIX` or USB-free paths are unlikely to matter
-  because the helper does all USB work natively.
+- **Wine differences.** `AF_UNIX` exists only in Wine Staging (found by CI on
+  Ubuntu's Wine 9.0); the TCP fallback covers mainline Wine. USB itself never
+  goes through Wine.

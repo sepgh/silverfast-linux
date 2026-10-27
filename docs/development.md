@@ -52,7 +52,8 @@ make container
 - `scripts/run-sti-selftest.sh`: creates a throwaway Wine prefix, registers a
   fake device, starts `tests/mock_usbd.py`, and drives `sti.dll` the way
   SilverFast does (`StiCreateInstance`, `GetDeviceList` with the 0x138 /
-  0x00010001 checks, `GetDeviceValue`, `CreateDevice`, lock, raw write/read).
+  0x00010001 checks, `GetDeviceValue`, `CreateDevice`, lock, raw write/read),
+  once over loopback TCP and, on Wine Staging, once over the Unix socket.
 - Hardware: see the checklist in the
   [v1 design spec](superpowers/specs/2026-10-27-silverfast-linux-v1-design.md#testing).
 
@@ -64,7 +65,7 @@ make container
 | sti.dll decisions | `~/.local/share/silverfast-linux/logs/sti.log` |
 | SilverFast's own log | `<prefix>/drive_c/users/$USER/AppData/Roaming/LaserSoft Imaging/SilverFast 9/LogFile.txt` |
 | Wine output | `~/.local/share/silverfast-linux/logs/wine.log`; add channels with e.g. `WINEDEBUG=+loaddll silverfast-linux run` |
-| Run the helper by hand | `build/silverfast-usbd --firmware-dir ~/.local/share/silverfast-linux/firmware --verbose` |
+| Run the helper by hand | `build/silverfast-usbd --firmware-dir ~/.local/share/silverfast-linux/firmware --verbose` (add `--tcp-port-file FILE` with `SFL_USBD_TOKEN=...` for the TCP endpoint) |
 
 ## Adding a scanner
 

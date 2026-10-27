@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <getopt.h>
 #include <libusb.h>
+#include <netinet/in.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -36,6 +38,8 @@ struct scanner {
 
 static const char *firmware_dir;
 static const char *socket_path;
+static const char *port_file;
+static const char *token;     /* from $SFL_USBD_TOKEN; required in HELLO when set */
 static int verbose;
 static FILE *log_file;
 static volatile sig_atomic_t stop;
@@ -228,10 +232,21 @@ static void handle_io_error(struct scanner *s, int err)
     if (scanner_open(s) == 0) logmsg("scanner reopened after disconnect");
 }
 
+/* HELLO payload: "SFL1" followed by the session token, if one is configured. */
+static int hello_ok(const uint8_t *buf, uint32_t len)
+{
+    size_t token_len = token ? strlen(token) : 0;
+
+    if (len != 4 + token_len || memcmp(buf, SFL_PROTOCOL_MAGIC, 4)) return 0;
+    return !token_len || !memcmp(buf + 4, token, token_len);
+}
+
 static void serve_client(struct scanner *s, int fd)
 {
     uint8_t hdr[SFL_HEADER_SIZE], *buf = NULL;
     size_t bufcap = 0;
+
+    int greeted = 0;
 
     while (!stop && !recv_all(fd, hdr, sizeof(hdr)))
     {
@@ -248,12 +263,14 @@ static void serve_client(struct scanner *s, int fd)
             buf = p; bufcap = want;
         }
         if (hdr[0] != SFL_OP_READ && len && recv_all(fd, buf, len)) break;
+        if (!greeted && hdr[0] != SFL_OP_HELLO) { logmsg("client did not say hello"); break; }
 
         switch (hdr[0])
         {
         case SFL_OP_HELLO:
-            if (len != 4 || memcmp(buf, SFL_PROTOCOL_MAGIC, 4)) { status = -EPROTO; break; }
+            if (!hello_ok(buf, len)) { status = -EACCES; logmsg("client rejected: bad hello"); break; }
             if ((status = scanner_open(s))) break;
+            greeted = 1;
             out_len = (uint32_t)strlen(s->model->name);
             memcpy(buf, s->model->name, out_len);
             break;
@@ -311,6 +328,31 @@ static int make_socket(const char *path)
     return fd;
 }
 
+/* Loopback TCP listener for Wine builds without AF_UNIX support (mainline
+ * Wine; AF_UNIX is a Wine Staging feature). The kernel picks the port, which
+ * is written to port_file for the launcher. Clients must know the token. */
+static int make_tcp_socket(void)
+{
+    struct sockaddr_in addr = { .sin_family = AF_INET, .sin_addr.s_addr = htonl(INADDR_LOOPBACK) };
+    socklen_t len = sizeof(addr);
+    FILE *f;
+    int fd;
+
+    if ((fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0)) < 0) return -1;
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) || listen(fd, 1) ||
+        getsockname(fd, (struct sockaddr *)&addr, &len))
+    {
+        fprintf(stderr, "cannot listen on loopback TCP: %s\n", strerror(errno));
+        close(fd);
+        return -1;
+    }
+    if (!(f = fopen(port_file, "w"))) { perror(port_file); close(fd); return -1; }
+    fprintf(f, "%u\n", ntohs(addr.sin_port));
+    fclose(f);
+    logmsg("listening on 127.0.0.1:%u", ntohs(addr.sin_port));
+    return fd;
+}
+
 static void on_signal(int sig)
 {
     (void)sig;
@@ -320,9 +362,11 @@ static void on_signal(int sig)
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s --firmware-dir DIR [--socket PATH] [--log FILE] [--verbose]\n"
+            "usage: %s --firmware-dir DIR [--socket PATH] [--tcp-port-file FILE] [--log FILE] [--verbose]\n"
             "  --firmware-dir DIR  directory holding the scanner firmware (e.g. esfwa1.bin)\n"
             "  --socket PATH       Unix socket to serve (default $XDG_RUNTIME_DIR/silverfast-linux/usbd.sock)\n"
+            "  --tcp-port-file FILE also listen on 127.0.0.1 (random port, written to FILE);\n"
+            "                      requires $SFL_USBD_TOKEN so other local users cannot connect\n"
             "  --log FILE          append log lines to FILE instead of stderr\n"
             "  --verbose           log every USB transfer\n", argv0);
 }
@@ -333,6 +377,7 @@ int main(int argc, char **argv)
         { "firmware-dir", required_argument, NULL, 'f' },
         { "socket",       required_argument, NULL, 's' },
         { "log",          required_argument, NULL, 'l' },
+        { "tcp-port-file", required_argument, NULL, 'p' },
         { "verbose",      no_argument,       NULL, 'v' },
         { "help",         no_argument,       NULL, 'h' },
         { 0 }
@@ -340,10 +385,11 @@ int main(int argc, char **argv)
     struct sigaction sa = { .sa_handler = on_signal };
     struct scanner s = { 0 };
     char default_socket[4096];
-    int c, listen_fd, ret;
+    struct pollfd fds[2];
+    int c, nfds = 1, listen_fd, ret;
 
     log_file = stderr;
-    while ((c = getopt_long(argc, argv, "f:s:l:vh", opts, NULL)) != -1)
+    while ((c = getopt_long(argc, argv, "f:s:l:p:vh", opts, NULL)) != -1)
     {
         switch (c)
         {
@@ -352,11 +398,15 @@ int main(int argc, char **argv)
         case 'l':
             if (!(log_file = fopen(optarg, "a"))) { perror(optarg); return 1; }
             break;
+        case 'p': port_file = optarg; break;
         case 'v': verbose = 1; break;
         default: usage(argv[0]); return c == 'h' ? 0 : 1;
         }
     }
     if (!firmware_dir) { usage(argv[0]); return 1; }
+    token = getenv("SFL_USBD_TOKEN");
+    if (token && !*token) token = NULL;
+    if (port_file && !token) { fprintf(stderr, "--tcp-port-file requires SFL_USBD_TOKEN\n"); return 1; }
     if (!socket_path)
     {
         const char *rt = getenv("XDG_RUNTIME_DIR");
@@ -373,6 +423,13 @@ int main(int argc, char **argv)
     if ((ret = libusb_init(&s.usb))) { fprintf(stderr, "libusb_init failed: %s\n", libusb_error_name(ret)); return 1; }
     if ((listen_fd = make_socket(socket_path)) < 0) { libusb_exit(s.usb); return 1; }
     logmsg("listening on %s", socket_path);
+    fds[0] = (struct pollfd){ .fd = listen_fd, .events = POLLIN };
+    if (port_file)
+    {
+        int tcp_fd = make_tcp_socket();
+        if (tcp_fd < 0) { close(listen_fd); unlink(socket_path); libusb_exit(s.usb); return 1; }
+        fds[nfds++] = (struct pollfd){ .fd = tcp_fd, .events = POLLIN };
+    }
 
     /* Open early so the firmware is loaded before SilverFast asks; a missing
      * scanner is not fatal, the next client request retries. */
@@ -380,15 +437,23 @@ int main(int argc, char **argv)
 
     while (!stop)
     {
-        int fd = accept4(listen_fd, NULL, NULL, SOCK_CLOEXEC);
-        if (fd < 0) { if (errno == EINTR) continue; logmsg("accept failed: %s", strerror(errno)); break; }
-        logmsg("client connected");
-        serve_client(&s, fd);
-        close(fd);
-        logmsg("client disconnected");
+        int i;
+
+        if (poll(fds, nfds, -1) < 0) { if (errno == EINTR) continue; logmsg("poll failed: %s", strerror(errno)); break; }
+        for (i = 0; i < nfds && !stop; i++)
+        {
+            int fd;
+            if (!(fds[i].revents & POLLIN)) continue;
+            if ((fd = accept4(fds[i].fd, NULL, NULL, SOCK_CLOEXEC)) < 0) continue;
+            logmsg("client connected (%s)", i ? "tcp" : "unix");
+            serve_client(&s, fd);
+            close(fd);
+            logmsg("client disconnected");
+        }
     }
 
-    close(listen_fd);
+    for (c = 0; c < nfds; c++) close(fds[c].fd);
+    if (port_file) unlink(port_file);
     unlink(socket_path);
     scanner_close(&s);
     sfl_rxbuf_free(&s.rx);

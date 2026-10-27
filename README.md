@@ -39,7 +39,7 @@ talks to the scanner over USB.
 | Full scans | ✅ tested at 1600 dpi, 48-bit, 261 MB with zero USB errors |
 | Scanner | Epson Perfection V600 Photo (`04b8:013a`) |
 | SilverFast edition | Whatever your MySilverFast account unlocks (tested with SE) |
-| Tested on | Fedora 43, Wine 11 |
+| Tested on | Fedora 43, Wine 11 (Staging) with the scanner; CI covers Ubuntu 24.04, Wine 9 |
 
 Other scanners are not supported yet — see the [roadmap](#roadmap).
 
@@ -111,7 +111,9 @@ flowchart LR
 - **`sti.dll`** replaces Wine's stub. It tells SilverFast which scanners exist
   (with the exact details SilverFast checks for) and passes SilverFast's raw
   scanner reads and writes to the helper.
-- **`silverfast-usbd`** owns the USB device on the Linux side. It uploads the
+- **`silverfast-usbd`** owns the USB device on the Linux side. It is reached
+  over a private Unix socket (Wine Staging) or a loopback port protected by a
+  per-session token (regular Wine). It uploads the
   V600's firmware when the scanner was just switched on (exactly what Epson's
   Windows driver does), and moves data in whole USB packets, which the V600
   needs.
