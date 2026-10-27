@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc make pkg-config libusb-1.0-0-dev gcc-mingw-w64-x86-64 \
+            wine64 wine python3 shellcheck
+
+      - name: Build
+        run: make
+
+      - name: Unit tests
+        run: make test-helper
+
+      - name: sti.dll self-test under Wine
+        run: make test-sti
+
+      - name: Lint shell scripts
+        run: shellcheck -S warning scripts/silverfast-linux scripts/run-sti-selftest.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: silverfast-linux-build
+          path: |
+            build/sti.dll
+            build/silverfast-usbd

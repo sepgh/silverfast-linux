@@ -1,0 +1,6 @@
+# Build image with everything needed to compile silverfast-linux:
+# gcc + libusb headers for the Linux helper, MinGW-w64 for sti.dll.
+FROM registry.fedoraproject.org/fedora:43
+RUN dnf -y install gcc make pkgconf-pkg-config libusb1-devel \
+        mingw64-gcc mingw64-headers mingw64-crt && \
+    dnf clean all

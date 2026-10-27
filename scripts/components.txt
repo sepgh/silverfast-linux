@@ -1,0 +1,23 @@
+# SilverFast 9 components installed by `silverfast-linux install`.
+#
+# Format: <component name> <destination>
+# Destinations mirror what LaserSoft's own installer scripts do on Windows:
+#   app             C:\Program Files\SilverFast Application\SilverFast 9
+#   programdata/X   C:\ProgramData\LaserSoft Imaging\SilverFast 9\X
+#   icc             C:\windows\system32\spool\drivers\color
+#
+# Components for other scanner brands, the Photoshop plug-in, Bonjour and the
+# legacy "old OS" build are skipped on purpose.
+
+com.silverfast.sf                  app
+com.silverfast.launcher            app
+com.silverfast.preparations        app
+com.silverfast.redistributable     app
+com.silverfast.3rdpartylicenses    programdata/3rdLicenses
+com.silverfast.colorprofiles       icc
+com.silverfast.epson.profiles      icc
+com.silverfast.epson.negafix       programdata/NegaFix
+com.silverfast.prefs               programdata/Prefs
+com.silverfast.sfimages            programdata/Images
+com.silverfast.sounds              programdata/Sounds
+com.silverfast.updateservice       programdata/Update
