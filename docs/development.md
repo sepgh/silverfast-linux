@@ -53,6 +53,16 @@ binaries. `make install` and `make test` afterwards reuse those outputs
 without needing the toolchain; `make test` still needs `wine` and `python3`
 on the host.
 
+## Releasing
+
+1. Set `VERSION=` in `scripts/silverfast-linux`.
+2. `make release` builds in an Ubuntu 22.04 container (so the helper needs
+   only glibc 2.34+) and runs the unit tests. Artifacts land in
+   `build-release/`: `silverfast-linux-<version>-x86_64.tar.gz`, laid out like
+   `make install` for extraction into `~/.local`, and `SHA256SUMS`.
+3. `scripts/run-sti-selftest.sh build-release` to check the release `sti.dll`.
+4. Tag `v<version>` on `main` and attach both files to a GitHub release.
+
 ## Tests
 
 - `build/test_firmware`: checksum preparation, the "firmware loaded" status bit,

@@ -1,5 +1,14 @@
 #include <winsock2.h>
+#if __has_include(<afunix.h>)
 #include <afunix.h>
+#else
+/* Older MinGW-w64 (e.g. Ubuntu 22.04) lacks afunix.h; same layout as Windows'. */
+#define UNIX_PATH_MAX 108
+typedef struct sockaddr_un {
+    ADDRESS_FAMILY sun_family;
+    char sun_path[UNIX_PATH_MAX];
+} SOCKADDR_UN;
+#endif
 #include <ws2tcpip.h>
 #include <stdio.h>
 #include <stdlib.h>

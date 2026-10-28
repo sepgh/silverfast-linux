@@ -9,6 +9,7 @@
 ![Scanner: Epson V600](https://img.shields.io/badge/scanner-Epson%20V600-0b5394)
 ![Status: v1](https://img.shields.io/badge/status-v1-2e7d32)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/sepgh/silverfast-linux)](https://github.com/sepgh/silverfast-linux/releases/latest)
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting) · [Roadmap](#roadmap) · [Docs](docs/)
 
@@ -53,7 +54,23 @@ Other scanners are not supported yet — see the [roadmap](#roadmap).
 | Debian / Ubuntu | `sudo apt install wine64 p7zip-full curl python3 libusb-1.0-0` |
 | Arch | `sudo pacman -S wine 7zip curl python libusb` |
 
-**2. Build**
+**2. Get silverfast-linux**
+
+**Option A — download the release (recommended).** Prebuilt for x86-64 Linux
+with glibc 2.34 or newer (Ubuntu 22.04, Debian 12, Fedora 35 and later):
+
+```sh
+curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.1.0/silverfast-linux-0.1.0-x86_64.tar.gz
+curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.1.0/SHA256SUMS
+sha256sum -c SHA256SUMS
+tar -xzf silverfast-linux-0.1.0-x86_64.tar.gz -C ~/.local --strip-components=1
+```
+
+This puts `silverfast-linux` in `~/.local/bin` (make sure it is on your
+`PATH`) and its files in `~/.local/lib/silverfast-linux`. All releases are on
+the [releases page](https://github.com/sepgh/silverfast-linux/releases).
+
+**Option B — build from source.**
 
 ```sh
 git clone https://github.com/sepgh/silverfast-linux.git
@@ -189,7 +206,16 @@ desktop application.
 
 The build tools are missing. Either install the build packages listed in
 [step 2](#quick-start), or build without them using `make container`
-(podman or docker), then run `make install`.
+(podman or docker), then run `make install`. Or skip building entirely and
+use the [release download](#quick-start) (option A).
+</details>
+
+<details>
+<summary><b><code>doctor</code> says "sti.dll installed in prefix — re-run install" after upgrading</b></summary>
+
+The prefix still has the `sti.dll` from an earlier build or release. Run
+`silverfast-linux install --accept-vendor-licenses` again; it reuses the
+cached downloads and only refreshes what changed.
 </details>
 
 <details>
