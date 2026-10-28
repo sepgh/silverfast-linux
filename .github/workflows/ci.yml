@@ -24,6 +24,9 @@ jobs:
       - name: Unit tests
         run: make test-helper
 
+      - name: Report tool tests
+        run: make test-report
+
       - name: sti.dll self-test under Wine
         run: make test-sti
 

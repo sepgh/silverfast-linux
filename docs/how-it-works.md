@@ -48,6 +48,7 @@ flowchart LR
 | `sti.dll` | Wine | Lists the scanners registered in the prefix, creates `IStiDevice` objects and forwards their raw reads and writes to the helper. |
 | `silverfast-usbd` | Linux | Owns the USB device through libusb, uploads firmware when needed, serves raw I/O over a Unix socket. |
 | `silverfast-linux` | Linux | Installs everything into a dedicated Wine prefix and launches the helper together with SilverFast. |
+| `models/*.json` | — | The scanner catalog: everything model-specific (USB ID, driver download, interpreter, firmware, registry values). |
 | `esxuina1.dll`, `esfwa1.bin` | Wine / Linux | Epson's protocol interpreter and the V600 firmware, downloaded from Epson. |
 
 ## What SilverFast expects from Windows
@@ -127,8 +128,10 @@ This only writes to the scanner's RAM; nothing is flashed. It is implemented in
 
 `silverfast-usbd` is a small C program on top of libusb. It:
 
-- opens the first supported scanner (`helper/src/models.h`), claims interface 0
-  and runs the firmware check/upload;
+- opens the scanner it is told to drive (`--device VID:PID`, from the
+  catalog), reads its bulk endpoints and packet size from the USB
+  descriptors, claims interface 0 and runs the firmware check/upload if the
+  catalog names a firmware file;
 - serves one client at a time on two endpoints, both in or announced through
   a `0700` directory under `$XDG_RUNTIME_DIR/silverfast-linux/`:
   - a Unix socket (`usbd.sock`), used by Wine Staging, which supports
@@ -149,6 +152,30 @@ The wire protocol is in `helper/src/protocol.h`: a 5-byte header
 (`op`, little-endian length), then the payload; every request gets an 8-byte
 reply (status as negative errno, length) followed by data. The first request
 must be `HELLO` with `SFL1` followed by the token.
+
+## The scanner catalog
+
+Everything that differs between scanners is data in `models/*.json`
+([format](../models/README.md)):
+
+- **install** downloads the model's Windows driver package, verifies it and
+  the files taken from it against pinned SHA-256s, installs the interpreter
+  into `system32` and the firmware into the firmware directory, and writes the
+  registry entry SilverFast reads (`scripts/sfl-models.py registry`);
+- **run** picks the connected installed scanner and passes its USB ID, name and
+  firmware to the helper;
+- **udev** generates rules for every catalog USB ID.
+
+These values are the ones Windows takes from the driver's INF, so a catalog
+entry can be generated from the INF: `report` and `try-scanner` find the
+INF section for the scanner's USB ID and emit a draft entry. Generated from
+Epson's V600 driver, the draft matches the hand-made V600 entry exactly.
+
+`drivers` helps find a driver: besides the catalog it searches Microsoft's
+Update Catalog for the scanner's Windows hardware ID
+(`USB\VID_xxxx&PID_yyyy`). That catalog has no API; the tool reads its search
+page and asks its download dialog for the file link, the same requests a
+browser makes.
 
 ## Installing SilverFast without its installer
 

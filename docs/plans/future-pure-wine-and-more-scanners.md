@@ -81,10 +81,11 @@ way.
 
 ### Work items
 
-1. **Model data file** — move the V600 constants out of the script and
-   `models.h` into `models/<vid>-<pid>.conf` (name, driver URL and SHA-256,
-   files to extract with SHA-256, registry `DeviceData`), read by both the
-   installer and the helper.
+1. **Model data file** — *done:* `models/<id>.json`, read by the installer,
+   launcher and udev generation; the helper gets the USB ID and firmware on
+   its command line and reads endpoints from the descriptors. Reports emit
+   draft entries. Driver lookup (`silverfast-linux drivers`) covers the
+   catalog and the Microsoft Update Catalog.
 2. **Generic firmware handling** — the upload sequence is shared by Epson's
    firmware-loading models (same WIA driver code); verify on a second model.
 3. **Native ESC/I models** (no interpreter, no firmware, e.g. V800/V850, V550)
@@ -97,6 +98,14 @@ way.
    Microtek via `libusb0_64.dll`, Nikon, Minolta); those need different
    investigation (libusb-win32 under Wine) and are out of scope until a tester
    with hardware volunteers.
+
+### Collecting data
+
+Implemented: `silverfast-linux report` and `silverfast-linux try-scanner`
+(which also emit a draft catalog entry)
+(see [adding-a-scanner.md](../adding-a-scanner.md)) produce the model data
+above from the Windows driver plus a logged SilverFast session, and the
+"New scanner" issue template collects them.
 
 ### Testing without hardware
 

@@ -1,0 +1,105 @@
+name: New scanner
+description: Ask for support for a scanner and share the data needed to add it
+title: "[Scanner] <manufacturer> <model>"
+labels: ["new scanner"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping support more scanners! Please follow
+        [Adding a scanner](https://github.com/sepgh/silverfast-linux/blob/main/docs/adding-a-scanner.md)
+        first — it explains how to create the report this form asks for.
+
+  - type: input
+    id: model
+    attributes:
+      label: Scanner model
+      description: As printed on the scanner, plus the regional name if different.
+      placeholder: Epson Perfection V700 Photo (GT-X900)
+    validations:
+      required: true
+
+  - type: input
+    id: usb-id
+    attributes:
+      label: USB ID (VID:PID)
+      description: Shown in the report's "USB devices" table, or by `lsusb`.
+      placeholder: 04b8:0130
+    validations:
+      required: true
+
+  - type: dropdown
+    id: silverfast-support
+    attributes:
+      label: Does SilverFast 9 officially support this scanner?
+      description: "[LaserSoft's supported scanners](https://www.silverfast.com/supported-scanners-models-devices/)"
+      options:
+        - "Yes"
+        - "No"
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: input
+    id: edition
+    attributes:
+      label: SilverFast edition you own
+      placeholder: SE / SE Plus / Ai Studio / none yet
+    validations:
+      required: false
+
+  - type: dropdown
+    id: works-elsewhere
+    attributes:
+      label: Have you used this scanner with SilverFast on Windows or macOS?
+      options:
+        - "Yes, it works there"
+        - "Yes, but it has problems there"
+        - "No"
+    validations:
+      required: true
+
+  - type: input
+    id: driver
+    attributes:
+      label: Windows driver download
+      description: Link to the Windows 10/11 64-bit driver you used for the report (the vendor's download page or the file link). `silverfast-linux drivers` can help find one.
+      placeholder: https://ftp.epson.com/drivers/....exe
+    validations:
+      required: true
+
+  - type: dropdown
+    id: report-kind
+    attributes:
+      label: Which report are you attaching?
+      options:
+        - "silverfast-linux try-scanner (includes a SilverFast session)"
+        - "silverfast-linux report (static data only)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: Drag the generated `.md` file here, or paste its contents.
+    validations:
+      required: true
+
+  - type: textarea
+    id: observations
+    attributes:
+      label: What happened?
+      description: If you ran `try-scanner`, what did SilverFast show? Did the scanner appear in the list, did START or the prescan work, which error messages appeared?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: I read the report and it contains nothing I don't want to share.
+          required: true
+        - label: I can test development versions with this scanner.
+          required: false

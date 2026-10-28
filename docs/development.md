@@ -7,7 +7,6 @@ helper/src/        silverfast-usbd (Linux, C, libusb)
   usbd.c             socket server, USB open/claim/reopen
   firmware.c/.h      firmware check and upload
   rxbuf.c/.h         packet-aligned receive buffer
-  models.h           supported scanners
   protocol.h         wire protocol shared with sti.dll
 helper/tests/      unit tests with fake devices
 sti/src/           sti.dll replacement (Windows, C, MinGW)
@@ -16,8 +15,11 @@ sti/src/           sti.dll replacement (Windows, C, MinGW)
   log.c/.h           diagnostics
 sti/tests/         sti_selftest.exe, run under Wine
 tests/mock_usbd.py mock helper used by the sti.dll self-test
-scripts/           silverfast-linux (install/run/doctor), components list, test runner
-udev/              udev rule for USB access
+models/            scanner catalog, one JSON file per scanner (format: models/README.md)
+scripts/           silverfast-linux (install/run/doctor/...), components list, test runner
+  sfl-models.py      catalog tool: validate, registry/udev generation, driver extraction,
+                     Microsoft Update Catalog search
+  sfl-report.py      scanner report and draft catalog entries from Windows drivers
 build-env/         Containerfile with the full toolchain
 ```
 
@@ -74,6 +76,10 @@ on the host.
   SilverFast does (`StiCreateInstance`, `GetDeviceList` with the 0x138 /
   0x00010001 checks, `GetDeviceValue`, `CreateDevice`, lock, raw write/read),
   once over loopback TCP and, on Wine Staging, once over the Unix socket.
+- `tests/test_sfl_report.py`, `tests/test_sfl_models.py` (`make test-report`):
+  INF parsing, catalog validation, registry and udev generation, model
+  selection, Microsoft Update Catalog parsing; also validates every file in
+  `models/`.
 - Hardware: see the checklist in the
   [v1 design spec](superpowers/specs/2026-10-27-silverfast-linux-v1-design.md#testing).
 
@@ -89,4 +95,7 @@ on the host.
 
 ## Adding a scanner
 
-See [plans/future-pure-wine-and-more-scanners.md](plans/future-pure-wine-and-more-scanners.md).
+See [adding-a-scanner.md](adding-a-scanner.md) and
+[plans/future-pure-wine-and-more-scanners.md](plans/future-pure-wine-and-more-scanners.md).
+`scripts/sfl-report.py` (tested by `make test-report`) does the INF parsing
+for `report` and `try-scanner`.

@@ -1,0 +1,34 @@
+{
+  "id": "epson-perfection-v600",
+  "name": "EPSON Perfection V600",
+  "vendor": "EPSON",
+  "usb": "04b8:013a",
+  "status": "supported",
+  "tested": "Fedora 43, Wine 11 Staging: prescan and 1600 dpi / 48-bit scan (v0.1.0)",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/EPSONScan_PerV600_3933_41_Signed.exe",
+    "sha256": "1ec32dcc16813c4070fb5c7ffb01506fe5a20197f2eb098c5deac5fab18a2b62",
+    "info": "Epson Scan 3.9.3.3, Windows 10/11 64-bit",
+    "files": {
+      "esxuina1.dll": "76c49ca15c3cc824f35ee90261a17145504117e0b9a9460289eac364dc608323",
+      "esfwa1.bin": "3fde1787469c5cc3624743da6be2671ee297d07ba3fa8439d9d9408631cd8bc3"
+    }
+  },
+  "interpreter": "esxuina1.dll",
+  "firmware": { "file": "esfwa1.bin", "protocol": "epson" },
+  "registry": {
+    "inf": "esa1.inf",
+    "install_section": "ES00A1_NTx64_60",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 19,
+    "device_data": {
+      "Model": "EPSON Perfection V600",
+      "ModelCode": "ES00A1",
+      "HOptRes": "6400,1",
+      "VOptRes": "9600,1",
+      "ExtCmdModule": "esxuina1.dll",
+      "ExtBinModule": "esfwa1.bin"
+    }
+  }
+}

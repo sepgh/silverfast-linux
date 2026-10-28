@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How silverfast-linux works
+    url: https://github.com/sepgh/silverfast-linux/blob/main/docs/how-it-works.md
+    about: Architecture, what SilverFast expects, and why the project is built this way.
+  - name: Adding a scanner
+    url: https://github.com/sepgh/silverfast-linux/blob/main/docs/adding-a-scanner.md
+    about: How to collect the data needed to support your scanner.

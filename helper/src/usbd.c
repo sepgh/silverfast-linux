@@ -21,7 +21,6 @@
 #include <unistd.h>
 
 #include "firmware.h"
-#include "models.h"
 #include "protocol.h"
 #include "rxbuf.h"
 
@@ -43,6 +42,20 @@ static const char *token;     /* from $SFL_USBD_TOKEN; required in HELLO when se
 static int verbose;
 static FILE *log_file;
 static volatile sig_atomic_t stop;
+
+/* The scanner to drive, from --device/--firmware (the launcher takes them
+ * from the scanner catalog in models/). Endpoints come from its USB
+ * descriptors. */
+struct sfl_model {
+    uint16_t    vid, pid;
+    const char *name;
+    const char *firmware;  /* file inside firmware_dir, uploaded with Epson's protocol */
+    uint8_t     ep_out, ep_in;
+    uint16_t    packet_size;
+};
+
+static struct sfl_model custom_model;
+static char custom_name[64];
 
 static void logmsg(const char *fmt, ...)
 {
@@ -157,18 +170,44 @@ out:
     return ret;
 }
 
+/* Fills in the first bulk OUT/IN endpoints of interface 0. */
+static int detect_endpoints(libusb_device_handle *h, struct sfl_model *m)
+{
+    struct libusb_config_descriptor *cfg;
+    const struct libusb_interface_descriptor *itf;
+    int i, ret;
+
+    if ((ret = libusb_get_active_config_descriptor(libusb_get_device(h), &cfg))) return usb_errno(ret);
+    if (cfg->bNumInterfaces < 1 || cfg->interface[0].num_altsetting < 1) { libusb_free_config_descriptor(cfg); return -ENODEV; }
+    itf = &cfg->interface[0].altsetting[0];
+    m->ep_in = m->ep_out = 0;
+    for (i = 0; i < itf->bNumEndpoints; i++)
+    {
+        const struct libusb_endpoint_descriptor *ep = &itf->endpoint[i];
+        if ((ep->bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) != LIBUSB_TRANSFER_TYPE_BULK) continue;
+        if ((ep->bEndpointAddress & LIBUSB_ENDPOINT_IN) && !m->ep_in) { m->ep_in = ep->bEndpointAddress; m->packet_size = ep->wMaxPacketSize; }
+        else if (!(ep->bEndpointAddress & LIBUSB_ENDPOINT_IN) && !m->ep_out) m->ep_out = ep->bEndpointAddress;
+    }
+    libusb_free_config_descriptor(cfg);
+    if (!m->ep_in || !m->ep_out) return -ENODEV;
+    logmsg("endpoints: out 0x%02x, in 0x%02x, packet %u", m->ep_out, m->ep_in, m->packet_size);
+    return 0;
+}
+
 static int scanner_open(struct scanner *s)
 {
-    size_t i;
     int ret;
 
     if (s->handle) return 0;
-    for (i = 0; i < SFL_MODEL_COUNT && !s->handle; i++)
+    s->model = &custom_model;
+    if (!(s->handle = libusb_open_device_with_vid_pid(s->usb, custom_model.vid, custom_model.pid))) return -ENODEV;
+    if ((ret = detect_endpoints(s->handle, &custom_model)))
     {
-        s->handle = libusb_open_device_with_vid_pid(s->usb, sfl_models[i].vid, sfl_models[i].pid);
-        s->model = &sfl_models[i];
+        logmsg("no bulk endpoints on interface 0");
+        libusb_close(s->handle);
+        s->handle = NULL;
+        return ret;
     }
-    if (!s->handle) return -ENODEV;
 
     libusb_set_auto_detach_kernel_driver(s->handle, 1);
     if ((ret = libusb_claim_interface(s->handle, 0)))
@@ -362,11 +401,15 @@ static void on_signal(int sig)
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s --firmware-dir DIR [--socket PATH] [--tcp-port-file FILE] [--log FILE] [--verbose]\n"
-            "  --firmware-dir DIR  directory holding the scanner firmware (e.g. esfwa1.bin)\n"
+            "usage: %s --device VID:PID [--firmware FILE --firmware-dir DIR] [--socket PATH]\n"
+            "       [--tcp-port-file FILE] [--log FILE] [--verbose]\n"
             "  --socket PATH       Unix socket to serve (default $XDG_RUNTIME_DIR/silverfast-linux/usbd.sock)\n"
             "  --tcp-port-file FILE also listen on 127.0.0.1 (random port, written to FILE);\n"
             "                      requires $SFL_USBD_TOKEN so other local users cannot connect\n"
+            "  --device VID:PID    the scanner to drive\n"
+            "  --firmware FILE     firmware to upload when the scanner has none running\n"
+            "  --firmware-dir DIR  directory holding FILE\n"
+            "  --name NAME         scanner name for logs and the client greeting\n"
             "  --log FILE          append log lines to FILE instead of stderr\n"
             "  --verbose           log every USB transfer\n", argv0);
 }
@@ -379,6 +422,9 @@ int main(int argc, char **argv)
         { "log",          required_argument, NULL, 'l' },
         { "tcp-port-file", required_argument, NULL, 'p' },
         { "verbose",      no_argument,       NULL, 'v' },
+        { "device",       required_argument, NULL, 'd' },
+        { "firmware",     required_argument, NULL, 'F' },
+        { "name",         required_argument, NULL, 'n' },
         { "help",         no_argument,       NULL, 'h' },
         { 0 }
     };
@@ -389,7 +435,7 @@ int main(int argc, char **argv)
     int c, nfds = 1, listen_fd, ret;
 
     log_file = stderr;
-    while ((c = getopt_long(argc, argv, "f:s:l:p:vh", opts, NULL)) != -1)
+    while ((c = getopt_long(argc, argv, "f:s:l:p:vd:F:n:h", opts, NULL)) != -1)
     {
         switch (c)
         {
@@ -400,10 +446,23 @@ int main(int argc, char **argv)
             break;
         case 'p': port_file = optarg; break;
         case 'v': verbose = 1; break;
+        case 'd':
+        {
+            unsigned int vid, pid;
+            if (sscanf(optarg, "%4x:%4x", &vid, &pid) != 2) { fprintf(stderr, "--device expects VID:PID\n"); return 1; }
+            custom_model.vid = vid;
+            custom_model.pid = pid;
+            if (!custom_name[0]) snprintf(custom_name, sizeof(custom_name), "USB device %04x:%04x", vid, pid);
+            custom_model.name = custom_name;
+            break;
+        }
+        case 'F': custom_model.firmware = optarg; break;
+        case 'n': snprintf(custom_name, sizeof(custom_name), "%s", optarg); break;
         default: usage(argv[0]); return c == 'h' ? 0 : 1;
         }
     }
-    if (!firmware_dir) { usage(argv[0]); return 1; }
+    if (!custom_model.vid) { usage(argv[0]); return 1; }
+    if (custom_model.firmware && !firmware_dir) { fprintf(stderr, "--firmware needs --firmware-dir\n"); return 1; }
     token = getenv("SFL_USBD_TOKEN");
     if (token && !*token) token = NULL;
     if (port_file && !token) { fprintf(stderr, "--tcp-port-file requires SFL_USBD_TOKEN\n"); return 1; }
