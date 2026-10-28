@@ -24,7 +24,7 @@ LIBUSB_LIBS   := $(shell pkg-config --libs libusb-1.0 2>/dev/null || echo -lusb-
 HELPER_SRC := helper/src/usbd.c helper/src/firmware.c helper/src/rxbuf.c
 STI_SRC    := sti/src/sti.c sti/src/transport.c sti/src/log.c
 
-.PHONY: all helper sti test test-helper test-sti container install uninstall dist release clean
+.PHONY: all helper sti test test-helper test-report test-sti container install uninstall dist release clean
 
 all: helper sti
 
@@ -50,7 +50,10 @@ $(BUILD)/sti_selftest.exe: sti/tests/sti_selftest.c | $(BUILD)
 $(BUILD)/test_%: helper/tests/test_%.c helper/src/%.c helper/src/%.h | $(BUILD)
 	$(CC) $(CFLAGS) $(WARN) -o $@ $< helper/src/$*.c
 
-test: test-helper test-sti
+test: test-helper test-report test-sti
+
+test-report:
+	python3 tests/test_sfl_report.py
 
 test-helper: $(BUILD)/test_firmware $(BUILD)/test_rxbuf
 	$(BUILD)/test_firmware
@@ -72,6 +75,7 @@ install: all
 	install -Dm644 $(BUILD)/sti.dll $(DESTDIR)$(PREFIX)/lib/silverfast-linux/sti.dll
 	install -Dm644 udev/70-silverfast-linux.rules $(DESTDIR)$(PREFIX)/lib/silverfast-linux/70-silverfast-linux.rules
 	install -Dm644 scripts/components.txt $(DESTDIR)$(PREFIX)/lib/silverfast-linux/components.txt
+	install -Dm755 scripts/sfl-report.py $(DESTDIR)$(PREFIX)/lib/silverfast-linux/sfl-report.py
 
 # Same layout as "make install", packed so it can be extracted into ~/.local.
 DIST_NAME := silverfast-linux-$(VERSION)-x86_64

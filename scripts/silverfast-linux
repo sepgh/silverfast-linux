@@ -32,10 +32,12 @@ if [ -f "$SCRIPT_DIR/../lib/silverfast-linux/sti.dll" ]; then
     LIB_DIR=$(cd "$SCRIPT_DIR/../lib/silverfast-linux" && pwd)
     STI_DLL=$LIB_DIR/sti.dll USBD=$LIB_DIR/silverfast-usbd
     COMPONENTS=$LIB_DIR/components.txt UDEV_RULE=$LIB_DIR/70-silverfast-linux.rules
+    REPORT_PY=$LIB_DIR/sfl-report.py
 else
     ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
     STI_DLL=$ROOT/build/sti.dll USBD=$ROOT/build/silverfast-usbd
     COMPONENTS=$ROOT/scripts/components.txt UDEV_RULE=$ROOT/udev/70-silverfast-linux.rules
+    REPORT_PY=$ROOT/scripts/sfl-report.py
 fi
 
 # --- vendor sources --------------------------------------------------------
@@ -74,6 +76,12 @@ commands:
   run            start the USB helper and SilverFast
   doctor         check that everything needed for scanning is in place
   udev           print the commands that grant USB access to the scanner
+  try-scanner --driver FILE|URL [--device VID:PID]
+                 experimental: register an unsupported scanner from its Windows
+                 driver, run SilverFast with full logging, and write a report
+  report [--device VID:PID] [--driver FILE|URL] [--output FILE]
+                 collect what is needed to support a new scanner, as Markdown
+                 to attach to a GitHub issue (see docs/adding-a-scanner.md)
   uninstall [--purge]
                  remove the Wine prefix (--purge also drops the download cache)
   version        print the version
@@ -318,36 +326,166 @@ s.connect(sys.argv[1])
 EOF
 }
 
-cmd_run() {
-    [ -f "$APP_DIR/SilverFast 9.exe" ] || die "SilverFast is not installed; run 'silverfast-linux install' first"
-    mkdir -p "$LOG_DIR" "$RUN_DIR"
+# start_helper LOGDIR [helper args...]: starts silverfast-usbd unless one is
+# already serving, and exports what sti.dll needs to reach it.
+start_helper() {
+    local logdir=$1; shift
+    mkdir -p "$logdir" "$RUN_DIR"
     chmod 700 "$RUN_DIR"
-    if ! scanner_node >/dev/null; then warn "$SCANNER_NAME is not connected; SilverFast will start without it"
-    elif ! usb_access_ok; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
-
     HELPER_PID=
     if helper_running && [ -s "$TOKEN_FILE" ] && [ -s "$PORT_FILE" ]; then
+        [ $# -eq 0 ] || die "silverfast-usbd is already running for another session; close SilverFast first"
         ok "silverfast-usbd already running"
     else
         rm -f "$PORT_FILE"
         (umask 077; od -An -N16 -tx1 /dev/urandom | tr -d ' \n' > "$TOKEN_FILE")
-        SFL_USBD_TOKEN=$(cat "$TOKEN_FILE") "$USBD" --firmware-dir "$FIRMWARE_DIR" --socket "$SOCKET" \
-            --tcp-port-file "$PORT_FILE" --log "$LOG_DIR/usbd.log" ${SFL_VERBOSE:+--verbose} &
+        SFL_USBD_TOKEN=$(cat "$TOKEN_FILE") "$USBD" --socket "$SOCKET" --tcp-port-file "$PORT_FILE" \
+            --log "$logdir/usbd.log" ${SFL_VERBOSE:+--verbose} "$@" &
         HELPER_PID=$!
         trap '[ -n "$HELPER_PID" ] && kill "$HELPER_PID" 2>/dev/null; wait 2>/dev/null; rm -f "$TOKEN_FILE"' EXIT
         for _ in $(seq 100); do [ -S "$SOCKET" ] && [ -s "$PORT_FILE" ] && break; sleep 0.1; done
-        [ -S "$SOCKET" ] && [ -s "$PORT_FILE" ] || die "silverfast-usbd did not start; see $LOG_DIR/usbd.log"
+        [ -S "$SOCKET" ] && [ -s "$PORT_FILE" ] || die "silverfast-usbd did not start; see $logdir/usbd.log"
     fi
-
-    export SFL_USBD_SOCKET=$SOCKET SFL_USBD_TCP SFL_USBD_TOKEN
+    export SFL_USBD_SOCKET=$SOCKET SFL_USBD_TCP SFL_USBD_TOKEN SFL_STI_LOG
     SFL_USBD_TCP=$(cat "$PORT_FILE")
     SFL_USBD_TOKEN=$(cat "$TOKEN_FILE")
-    export SFL_STI_LOG; SFL_STI_LOG=$(WINEDEBUG=-all winepath -w "$LOG_DIR/sti.log" 2>/dev/null)
+    SFL_STI_LOG=$(WINEDEBUG=-all winepath -w "$logdir/sti.log" 2>/dev/null)
+}
+
+# launch_silverfast LOGDIR [args...]: runs SilverFast and waits for Wine to exit.
+launch_silverfast() {
+    local logdir=$1; shift
     export WINEDLLOVERRIDES="sti=n;winemenubuilder.exe=d;${WINEDLLOVERRIDES:-}"
     export WINEDEBUG=${WINEDEBUG:--all}
-    cd "$APP_DIR"
-    wine "SilverFast 9.exe" "$@" >>"$LOG_DIR/wine.log" 2>&1 || true
+    (cd "$APP_DIR" && wine "SilverFast 9.exe" "$@" >>"$logdir/wine.log" 2>&1) || true
     wineserver -w
+}
+
+cmd_run() {
+    [ -f "$APP_DIR/SilverFast 9.exe" ] || die "SilverFast is not installed; run 'silverfast-linux install' first"
+    if ! scanner_node >/dev/null; then warn "$SCANNER_NAME is not connected; SilverFast will start without it"
+    elif ! usb_access_ok; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
+    start_helper "$LOG_DIR" --firmware-dir "$FIRMWARE_DIR"
+    launch_silverfast "$LOG_DIR" "$@"
+}
+
+# --- try-scanner -------------------------------------------------------------
+# Registry slot for the scanner being tried; the supported V600 uses 0000.
+TRY_SLOT=0100
+
+# Writes a .reg file registering the scanner described by model.json.
+try_registry() {
+    python3 - "$1" "$TRY_SLOT" <<'PY'
+import json, sys
+m = json.load(open(sys.argv[1]))
+slot = sys.argv[2]
+key = r"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}" + "\\" + slot
+esc = lambda v: str(v).replace("\\", "\\\\").replace('"', '\\"')
+print("REGEDIT4\n")
+print(f"[-{key}]\n")
+print(f"[{key}]")
+for k, v in {"DriverDesc": m["name"], "FriendlyName": m["name"], "Vendor": m.get("vendor", ""),
+             "ProviderName": m.get("vendor", ""), "SubClass": "StillImage",
+             "DeviceID": "{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\" + slot,
+             "MatchingDeviceId": f"usb\\vid_{m['vid']}&pid_{m['pid']}",
+             "InfPath": m.get("inf", ""), "InfSection": m.get("install_section", ""),
+             "CreateFileName": "\\\\.\\Usbscan" + str(int(slot))}.items():
+    print(f'"{k}"="{esc(v)}"')
+for k in ("device_type", "device_subtype", "capabilities"):
+    name = {"device_type": "DeviceType", "device_subtype": "DeviceSubType", "capabilities": "Capabilities"}[k]
+    print(f'"{name}"=dword:{m.get(k, 0):08x}')
+print('"HardwareConfig"=dword:00000004\n')
+print(f"[{key}\\DeviceData]")
+for k, v in m.get("device_data", {}).items():
+    print(f'"{esc(k)}"="{esc(v)}"')
+PY
+}
+
+try_cleanup() {
+    local reg; reg=$(mktemp --suffix=.reg)
+    printf 'REGEDIT4\n\n[-HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\%s]\n' "$TRY_SLOT" > "$reg"
+    quiet_wine wine regedit /S "$(quiet_wine winepath -w "$reg")" 2>/dev/null || true
+    rm -f "$reg"
+}
+
+cmd_try_scanner() {
+    local device='' driver='' report dir model vid pid helper_args interp fw
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --device) device=${2:?}; shift 2 ;;
+            --driver) driver=${2:?}; shift 2 ;;
+            *) die "unknown try-scanner option: $1" ;;
+        esac
+    done
+    [ -n "$driver" ] || die "try-scanner needs --driver FILE|URL (the scanner's Windows driver package)"
+    [ -f "$APP_DIR/SilverFast 9.exe" ] || die "SilverFast is not installed; run 'silverfast-linux install' first"
+    ! helper_running || die "SilverFast is already running; close it first"
+    need python3; need 7z
+    if [[ $driver == http://* || $driver == https://* ]]; then
+        step "Downloading the driver package"
+        local file; file=$CACHE_DIR/report/$(basename "${driver%%\?*}")
+        download "$driver" "$file"
+        driver=$file
+    fi
+
+    report=$PWD/silverfast-linux-try-$(date +%Y%m%d-%H%M%S).md
+    dir=$SFL_HOME/try/$(date +%Y%m%d-%H%M%S)
+    model=$dir/model.json
+    mkdir -p "$dir/logs"
+    step "Reading the scanner and its Windows driver"
+    python3 "$REPORT_PY" --tool-version "$VERSION" ${device:+--device "$device"} --driver "$driver" \
+        --model-json "$model" --keep-files "$dir/files" >"$report"
+    [ -s "$model" ] && python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("vid") else 1)' "$model" \
+        || die "the driver package does not describe this scanner; see $report"
+    vid=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["vid"])' "$model")
+    pid=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$model")
+    interp=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("extcmdmodule", ""))' "$model")
+    fw=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("extbinmodule", ""))' "$model")
+    ok "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$model") ($vid:$pid)"
+
+    step "Registering it in the Wine prefix (temporarily)"
+    local reg; reg=$(mktemp --suffix=.reg)
+    try_registry "$model" > "$reg"
+    quiet_wine wine regedit /S "$(quiet_wine winepath -w "$reg")" || die "registry import failed"
+    rm -f "$reg"
+    [ -z "$interp" ] || install -Dm644 "$interp" "$SYSTEM32/$(basename "$interp")"
+    trap 'try_cleanup' RETURN
+
+    helper_args=(--firmware-dir "$dir/files" --device "$vid:$pid")
+    # The firmware upload sequence is Epson's; only use it for Epson scanners.
+    if [ -n "$fw" ] && [ "$vid" = 04b8 ]; then helper_args+=(--firmware "$(basename "$fw")"); fi
+    step "Starting SilverFast with full USB logging"
+    echo "  Select the scanner, press START, try a prescan, then close SilverFast."
+    SFL_VERBOSE=1 start_helper "$dir/logs" "${helper_args[@]}"
+    launch_silverfast "$dir/logs"
+
+    step "Adding the session logs to the report"
+    python3 - "$report" "$dir/logs" "$WINEPREFIX" <<'PY'
+import glob, os, re, sys
+report, logs, prefix = sys.argv[1:4]
+home = os.path.expanduser("~")
+def clean(t):
+    t = t.replace(home, "~")
+    t = re.sub(r"(?i)users[/\\][^/\\]+[/\\]", "users/<user>/", t)
+    return re.sub(r"[\w.+-]+@[\w-]+\.[\w.-]+", "<email>", t)
+def block(title, path, head=400, tail=300):
+    try:
+        lines = open(path, errors="replace").read().splitlines()
+    except OSError:
+        return f"### {title}\n\n(not found)\n"
+    if len(lines) > head + tail:
+        lines = lines[:head] + [f"... {len(lines) - head - tail} lines omitted ..."] + lines[-tail:]
+    return f"### {title}\n\n```\n" + clean("\n".join(lines)) + "\n```\n"
+sf_log = glob.glob(os.path.join(prefix, "drive_c/users/*/AppData/Roaming/LaserSoft Imaging/SilverFast 9/LogFile.txt"))
+with open(report, "a") as f:
+    f.write("\n## Try session\n\n")
+    f.write(block("silverfast-usbd (USB traffic)", os.path.join(logs, "usbd.log")))
+    f.write(block("sti.dll", os.path.join(logs, "sti.log")))
+    f.write(block("SilverFast LogFile.txt (last lines)", sf_log[0], head=0, tail=200) if sf_log else "")
+PY
+    ok "report: $report"
+    echo "Review it, then open a \"New scanner\" issue and attach it:"
+    echo "  https://github.com/sepgh/silverfast-linux/issues/new?template=new-scanner.yml"
 }
 
 # --- doctor ----------------------------------------------------------------
@@ -381,6 +519,37 @@ Then unplug and replug the scanner (or switch it off and on).
 EOF
 }
 
+cmd_report() {
+    local device='' driver='' output doctor_out file
+    output=silverfast-linux-report-$(date +%Y%m%d-%H%M%S).md
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --device) device=${2:?}; shift 2 ;;
+            --driver) driver=${2:?}; shift 2 ;;
+            --output) output=${2:?}; shift 2 ;;
+            *) die "unknown report option: $1" ;;
+        esac
+    done
+    need python3
+    [ -z "$driver" ] || need 7z "needed to unpack the driver package"
+    if [[ $driver == http://* || $driver == https://* ]]; then
+        step "Downloading the driver package"
+        file=$CACHE_DIR/report/$(basename "${driver%%\?*}")
+        download "$driver" "$file"
+        driver=$file
+    fi
+    doctor_out=$(mktemp)
+    cmd_doctor >"$doctor_out" 2>&1 || true
+    step "Collecting scanner information"
+    python3 "$REPORT_PY" --tool-version "$VERSION" --doctor "$doctor_out" \
+        ${device:+--device "$device"} ${driver:+--driver "$driver"} >"$output"
+    rm -f "$doctor_out"
+    ok "written to $output"
+    echo "Review the file (it contains no serial numbers or personal paths), then open"
+    echo "a \"New scanner\" issue and attach it:"
+    echo "  https://github.com/sepgh/silverfast-linux/issues/new?template=new-scanner.yml"
+}
+
 cmd_uninstall() {
     step "Removing $SFL_HOME"
     WINEDEBUG=-all wineserver -k 2>/dev/null || true
@@ -394,6 +563,8 @@ case ${1:-} in
     run)       shift; cmd_run "$@" ;;
     doctor)    cmd_doctor ;;
     udev)      cmd_udev ;;
+    report)    shift; cmd_report "$@" ;;
+    try-scanner) shift; cmd_try_scanner "$@" ;;
     uninstall) shift; cmd_uninstall "$@" ;;
     version)   echo "$VERSION" ;;
     -h|--help|help|"") usage ;;

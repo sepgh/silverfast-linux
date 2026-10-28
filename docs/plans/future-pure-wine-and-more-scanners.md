@@ -98,6 +98,13 @@ way.
    investigation (libusb-win32 under Wine) and are out of scope until a tester
    with hardware volunteers.
 
+### Collecting data
+
+Implemented: `silverfast-linux report` and `silverfast-linux try-scanner`
+(see [adding-a-scanner.md](../adding-a-scanner.md)) produce the model data
+above from the Windows driver plus a logged SilverFast session, and the
+"New scanner" issue template collects them.
+
 ### Testing without hardware
 
 - Extract model data from Epson's INF automatically and check it into tests.

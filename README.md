@@ -42,7 +42,7 @@ talks to the scanner over USB.
 | SilverFast edition | Whatever your MySilverFast account unlocks (tested with SE) |
 | Tested on | Fedora 43, Wine 11 (Staging) with the scanner; CI covers Ubuntu 24.04, Wine 9 |
 
-Other scanners are not supported yet — see the [roadmap](#roadmap).
+Other scanners are not supported yet — [help add yours](#want-support-for-your-scanner).
 
 ## Quick start
 
@@ -185,6 +185,8 @@ desktop application.
 | `silverfast-linux run` | Start the USB helper and SilverFast. |
 | `silverfast-linux doctor` | Check Wine, the installation, the scanner and its permissions. |
 | `silverfast-linux udev` | Show how to grant USB access to the scanner. |
+| `silverfast-linux report --driver FILE\|URL` | Collect what is needed to support a new scanner (Markdown for an issue). |
+| `silverfast-linux try-scanner --driver FILE\|URL` | Experimental: try an unsupported scanner in SilverFast with full logging. |
 | `silverfast-linux uninstall [--purge]` | Remove the prefix (and with `--purge`, the download cache). |
 
 **Where things live**
@@ -257,6 +259,21 @@ the install. For the Epson driver, open an issue: its hashes are pinned in
 `scripts/silverfast-linux` and need updating.
 </details>
 
+## Want support for your scanner?
+
+If SilverFast supports your scanner on Windows, you can help bring it to
+Linux without writing code:
+
+1. Download your scanner's Windows driver from the manufacturer.
+2. Run `silverfast-linux try-scanner --driver <driver file or link>` — it
+   tries your scanner in SilverFast and writes a report — or
+   `silverfast-linux report --driver …` for the data alone.
+3. Open a [**New scanner** issue](https://github.com/sepgh/silverfast-linux/issues/new?template=new-scanner.yml)
+   and attach the report.
+
+[docs/adding-a-scanner.md](docs/adding-a-scanner.md) explains each step and
+exactly what the report contains.
+
 ## Roadmap
 
 - **v1 (this release):** Epson Perfection V600, Linux helper + `sti.dll`.
@@ -271,6 +288,7 @@ If you own another scanner and want to help test, please open an issue.
 ## Documentation
 
 - [How it works](docs/how-it-works.md) — architecture, reverse-engineering findings, design decisions
+- [Adding a scanner](docs/adding-a-scanner.md) — collecting data for a new scanner, and turning it into support
 - [Development](docs/development.md) — building, tests, debugging, layout
 - [v1 design spec](docs/superpowers/specs/2026-10-27-silverfast-linux-v1-design.md)
 - [Future plan](docs/plans/future-pure-wine-and-more-scanners.md)

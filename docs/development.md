@@ -89,4 +89,7 @@ on the host.
 
 ## Adding a scanner
 
-See [plans/future-pure-wine-and-more-scanners.md](plans/future-pure-wine-and-more-scanners.md).
+See [adding-a-scanner.md](adding-a-scanner.md) and
+[plans/future-pure-wine-and-more-scanners.md](plans/future-pure-wine-and-more-scanners.md).
+`scripts/sfl-report.py` (tested by `make test-report`) does the INF parsing
+for `report` and `try-scanner`.

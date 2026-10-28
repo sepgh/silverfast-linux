@@ -1,0 +1,66 @@
+name: Bug report
+description: Something does not work with a supported scanner
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please run `silverfast-linux doctor` first; the
+        [troubleshooting section](https://github.com/sepgh/silverfast-linux#troubleshooting)
+        covers the common problems.
+
+  - type: input
+    id: version
+    attributes:
+      label: silverfast-linux version
+      description: Output of `silverfast-linux version`
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: Distribution and Wine version
+      placeholder: Fedora 43, wine-11.0 (Staging)
+    validations:
+      required: true
+
+  - type: input
+    id: scanner
+    attributes:
+      label: Scanner
+      placeholder: Epson Perfection V600
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead (include SilverFast's error message).
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `silverfast-linux doctor`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Reproduce with `SFL_VERBOSE=1 silverfast-linux run`, then attach:
+        - `~/.local/share/silverfast-linux/logs/usbd.log`
+        - `~/.local/share/silverfast-linux/logs/sti.log`
+        - SilverFast's `LogFile.txt` from `~/.local/share/silverfast-linux/prefix/drive_c/users/<you>/AppData/Roaming/LaserSoft Imaging/SilverFast 9/`
+
+        Check them for personal data (e.g. your MySilverFast e-mail) before attaching.
+    validations:
+      required: false
