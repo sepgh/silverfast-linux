@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="docs/silverfast-linux.png" alt="silverfast-linux logo" width="180">
-
 # silverfast-linux
 
 **Run SilverFast 9 on Linux and scan with your USB scanner — no Windows VM required.**
@@ -340,9 +338,6 @@ SilverFast is a trademark of LaserSoft Imaging AG. Epson and Perfection are
 trademarks of Seiko Epson Corporation. silverfast-linux downloads their
 software from their official servers on your machine; using it is subject to
 their licence terms. This project contains only original code.
-
-The project logo includes Tux, the Linux penguin, originally drawn by Larry
-Ewing (lewing@isc.tamu.edu) with The GIMP.
 
 ## License
 
