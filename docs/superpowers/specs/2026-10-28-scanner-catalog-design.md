@@ -1,6 +1,6 @@
 # Scanner catalog and driver lookup — design
 
-Date: 2026-10-28 · Status: implemented on branch `scanner-report` · Builds on the
+Date: 2026-10-28 · Status: implemented, released in 0.2.0 · Builds on the
 [v1 design](2026-10-27-silverfast-linux-v1-design.md)
 
 ## Goal

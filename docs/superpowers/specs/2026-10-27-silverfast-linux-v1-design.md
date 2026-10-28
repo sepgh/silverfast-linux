@@ -1,6 +1,10 @@
 # silverfast-linux v1 — design
 
 Date: 2026-10-27 · Status: approved, implemented on branch `v1-wine-sti-bridge`
+(released as 0.1.0). Scanner-specific parts — the hard-coded V600 driver,
+registry values, helper model table and static udev rule — were later moved
+into the scanner catalog; see the
+[catalog design](2026-10-28-scanner-catalog-design.md).
 
 ## Goal
 

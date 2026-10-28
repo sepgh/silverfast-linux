@@ -9,6 +9,7 @@ only want to scan, the [README](../README.md) is enough.
 - [What SilverFast expects from Windows](#what-silverfast-expects-from-windows)
 - [The V600 firmware upload](#the-v600-firmware-upload)
 - [The USB helper](#the-usb-helper)
+- [The scanner catalog](#the-scanner-catalog)
 - [Installing SilverFast without its installer](#installing-silverfast-without-its-installer)
 - [Design decisions](#design-decisions)
 - [How the findings were made](#how-the-findings-were-made)
@@ -46,10 +47,10 @@ flowchart LR
 | Piece | Runs on | Role |
 |---|---|---|
 | `sti.dll` | Wine | Lists the scanners registered in the prefix, creates `IStiDevice` objects and forwards their raw reads and writes to the helper. |
-| `silverfast-usbd` | Linux | Owns the USB device through libusb, uploads firmware when needed, serves raw I/O over a Unix socket. |
+| `silverfast-usbd` | Linux | Owns the USB device through libusb, uploads firmware when needed, serves raw I/O over a Unix socket or token-protected loopback TCP. |
 | `silverfast-linux` | Linux | Installs everything into a dedicated Wine prefix and launches the helper together with SilverFast. |
 | `models/*.json` | — | The scanner catalog: everything model-specific (USB ID, driver download, interpreter, firmware, registry values). |
-| `esxuina1.dll`, `esfwa1.bin` | Wine / Linux | Epson's protocol interpreter and the V600 firmware, downloaded from Epson. |
+| Driver files, e.g. `esxuina1.dll`, `esfwa1.bin` | Wine / Linux | Taken from the scanner maker's Windows driver as the catalog entry says; for the V600, Epson's protocol interpreter and firmware. |
 
 ## What SilverFast expects from Windows
 
@@ -122,7 +123,9 @@ The sequence below is taken from `CWIADriver::InitScanner` and
    - send `80`, expect `06`
 
 This only writes to the scanner's RAM; nothing is flashed. It is implemented in
-`helper/src/firmware.c` and unit-tested against a scripted fake device.
+`helper/src/firmware.c` and unit-tested against a scripted fake device. A
+catalog entry selects it with `"firmware": {"file": …, "protocol": "epson"}`;
+it is the only firmware protocol implemented so far.
 
 ## The USB helper
 
@@ -228,10 +231,16 @@ tries the Unix socket first and falls back to TCP.
 whole WIA service under Wine. The upload is short and well understood, so the
 helper performs it — the same bytes Epson's driver sends.
 
-**Download vendor files at install time.** Neither SilverFast nor Epson's files
-may be redistributed. The installer fetches them from the vendors and verifies
-them: SilverFast against LaserSoft's published SHA-1s, the Epson driver and the
-two files taken from it against pinned SHA-256s.
+**Download vendor files at install time.** Neither SilverFast nor scanner
+makers' files may be redistributed. The installer fetches them from the vendors
+and verifies them: SilverFast against LaserSoft's published SHA-1s, each
+scanner driver package and the files taken from it against the SHA-256s pinned
+in its catalog entry.
+
+**Scanners as data.** Everything model-specific lives in `models/*.json`, and
+those values are exactly what Windows reads from the driver's INF. New scanners
+therefore need a data file — which `report` generates — rather than code, and
+the helper and `sti.dll` stay model-agnostic.
 
 **A dedicated Wine prefix.** SilverFast, the `sti.dll` override and the device
 registration stay out of your other Wine prefixes.

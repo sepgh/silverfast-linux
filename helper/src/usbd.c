@@ -1,5 +1,5 @@
 /* silverfast-usbd: gives SilverFast (running in Wine) raw USB access to the
- * scanner through a Unix socket. sti.dll inside the Wine prefix is the only
+ * scanner through a Unix socket or token-protected loopback TCP. sti.dll inside the Wine prefix is the only
  * client; see helper/src/protocol.h for the wire format and
  * docs/how-it-works.md for the overall design.
  */

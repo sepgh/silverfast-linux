@@ -1,6 +1,9 @@
 # Future plan: pure-Wine USB path and more scanners
 
-Status: planned, not started. v1 (helper + `sti.dll`) is described in
+Status: Part A planned, not started. Part B in progress — the scanner catalog,
+reports, `try-scanner` and driver lookup shipped in 0.2.0
+([design](../superpowers/specs/2026-10-28-scanner-catalog-design.md)). The
+current architecture (helper + `sti.dll`) is described in
 [the v1 design](../superpowers/specs/2026-10-27-silverfast-linux-v1-design.md).
 
 ## Part A — pure Wine (`usbscan.sys`)
@@ -109,7 +112,10 @@ above from the Windows driver plus a logged SilverFast session, and the
 
 ### Testing without hardware
 
-- Extract model data from Epson's INF automatically and check it into tests.
+- Extract model data from Epson's INF automatically and check it into tests
+  (the INF parsing exists in `scripts/sfl-report.py`; draft entries for models
+  without a tester could be generated from their drivers and marked
+  `experimental`).
 - Record USB traffic (`SFL_VERBOSE=1`) from volunteers and replay it against
   the helper in CI.
 
