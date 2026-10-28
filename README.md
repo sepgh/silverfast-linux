@@ -4,11 +4,11 @@
 
 # silverfast-linux
 
-**Run SilverFast 9 on Linux and scan with your Epson Perfection V600 — no Windows VM required.**
+**Run SilverFast 9 on Linux and scan with your USB scanner — no Windows VM required.**
 
 [![CI](https://github.com/sepgh/silverfast-linux/actions/workflows/ci.yml/badge.svg)](https://github.com/sepgh/silverfast-linux/actions/workflows/ci.yml)
 ![Wine 9+](https://img.shields.io/badge/Wine-9%2B-8b0000)
-![Scanner: Epson V600](https://img.shields.io/badge/scanner-Epson%20V600-0b5394)
+![Tested with: Epson V600](https://img.shields.io/badge/tested%20with-Epson%20V600-0b5394)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/sepgh/silverfast-linux)](https://github.com/sepgh/silverfast-linux/releases/latest)
 
@@ -23,7 +23,12 @@ software, popular for film and photo scanning. It is only available for
 Windows and macOS. silverfast-linux runs the **Windows build of SilverFast 9
 under Wine** and supplies the two pieces Wine is missing to reach a scanner: a
 working Windows still-image layer (`sti.dll`) and a small Linux helper that
-talks to the scanner over USB.
+talks to the scanner over USB. Scanners are described as data in a
+[scanner catalog](models/), so any scanner SilverFast supports through the
+standard Windows scanner stack can be added without code.
+
+The **Epson Perfection V600** is the reference scanner: everything is
+developed and tested on it, and it works end to end.
 
 > [!NOTE]
 > This is an unofficial community project. It is not affiliated with or
@@ -39,11 +44,15 @@ talks to the scanner over USB.
 | Scanner detection, firmware loading | ✅ automatic, on every power-on |
 | Prescan | ✅ |
 | Full scans | ✅ tested at 1600 dpi, 48-bit, 261 MB with zero USB errors |
-| Scanners | Epson Perfection V600 Photo (`04b8:013a`) — see the [scanner catalog](models/) |
+| Scanners | Every scanner in the [catalog](models/): *supported* ones are confirmed, *experimental* ones are generated from their Windows drivers and waiting for a tester |
+| Reference scanner | Epson Perfection V600 Photo (`04b8:013a`) — used for all development and testing, works end to end |
 | SilverFast edition | Whatever your MySilverFast account unlocks (tested with SE) |
 | Tested on | Fedora 43, Wine 11 (Staging) with the scanner; CI covers Ubuntu 24.04, Wine 9 |
 
-Other scanners are not supported yet — [help add yours](#want-support-for-your-scanner).
+Today the catalog's only confirmed entry is the V600. Other scanners that
+SilverFast supports on Windows are likely to work the same way — check
+`silverfast-linux scanners`, try yours with `silverfast-linux try-scanner`, and
+[help add it](#want-support-for-your-scanner).
 
 ## Quick start
 
@@ -298,8 +307,9 @@ exactly what the report contains.
 
 ## Roadmap
 
-- **Done:** Epson Perfection V600 with the Linux helper + `sti.dll` (0.1);
-  scanner catalog, reports, `try-scanner` and driver lookup (0.2).
+- **Done:** Linux helper + `sti.dll`, verified on the Epson Perfection V600
+  (0.1); scanner catalog, reports, `try-scanner` and driver lookup so other
+  scanners can be added as data (0.2).
 - **Pure Wine:** a `usbscan.sys` driver so no helper process is needed and
   the work can go upstream into Wine.
 - **More scanners:** the [catalog](models/) is data-driven and reports

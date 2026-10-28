@@ -4,10 +4,15 @@ This document explains what happens between SilverFast and your scanner, how
 each piece was discovered, and why the project is built the way it is. If you
 only want to scan, the [README](../README.md) is enough.
 
+Nothing here is specific to one scanner: model details live in the
+[scanner catalog](#the-scanner-catalog). The examples use the **Epson
+Perfection V600**, the reference scanner the project was reverse-engineered
+and tested with; values that differ per scanner are marked as such.
+
 - [The problem](#the-problem)
 - [Architecture](#architecture)
 - [What SilverFast expects from Windows](#what-silverfast-expects-from-windows)
-- [The V600 firmware upload](#the-v600-firmware-upload)
+- [Firmware upload (Epson)](#firmware-upload-epson)
 - [The USB helper](#the-usb-helper)
 - [The scanner catalog](#the-scanner-catalog)
 - [Installing SilverFast without its installer](#installing-silverfast-without-its-installer)
@@ -40,7 +45,7 @@ flowchart LR
         STI --> REG[("registry:<br/>Image device class")]
     end
     STI -->|"Unix socket (Wine Staging)<br/>or loopback TCP + token"| USBD["silverfast-usbd<br/>(this project, Linux)"]
-    USBD -->|"libusb bulk transfers"| SCN["Epson V600"]
+    USBD -->|"libusb bulk transfers"| SCN["Scanner<br/>(e.g. Epson V600)"]
     USBD -. "firmware upload<br/>on first open" .-> SCN
 ```
 
@@ -69,11 +74,12 @@ disassembling the relevant functions.
    and reads:
    - `DeviceID` — must equal the device's internal STI name
      (`{6BDD1FC6-…}\NNNN`). Without it the device is silently ignored.
-   - `MatchingDeviceId` — `usb\vid_04b8&pid_013a`; the USB IDs select the
-     scanner model (shown as "Epson V600 / GT-X820").
+   - `MatchingDeviceId` — the scanner's USB IDs, e.g. `usb\vid_04b8&pid_013a`
+     for the V600; they select the scanner model (shown as "Epson V600 /
+     GT-X820").
 
 On a real Windows system the STI class installer writes these values when the
-Epson driver is installed. Under Wine, `silverfast-linux install` writes them.
+scanner's driver is installed. Under Wine, `silverfast-linux install` writes them.
 
 ### Opening the scanner
 
@@ -90,19 +96,21 @@ Failing either check produces SilverFast's "Lock failed!" error. After that it
 calls `CreateDevice`, `LockDevice`, and does all communication with
 `RawWriteData` / `RawReadData`, then `UnLockDevice` and `Release`.
 
-### The Epson interpreter
+### The Epson interpreter (scanners with `ExtCmdModule`)
 
-The V600 does not speak Epson's ESC/I command language natively. Epson ships a
+Some scanners, like the V600, do not speak Epson's ESC/I command language
+natively; their driver names an interpreter in `DeviceData\ExtCmdModule`. Epson ships a
 host-side "interpreter" (`esxuina1.dll` for x64) that translates ESC/I into the
 scanner's low-level protocol. SilverFast loads it from `system32` (falling back
 from a hard-coded Windows driver-store path), calls `INTInit(read_cb, write_cb)`
 and then sends ESC/I through `INTWrite`/`INTRead`. The callbacks end up in
 `IStiDevice::RawReadData`/`RawWriteData`, chunked to at most 0xFFFF bytes.
 
-## The V600 firmware upload
+## Firmware upload (Epson)
 
-The V600 boots without operational firmware and needs it uploaded into RAM
-after every power-on. SilverFast does not do this; on Windows, Epson's WIA
+Scanners whose driver names a firmware file (`DeviceData\ExtBinModule`) boot
+without operational firmware and need it uploaded into RAM after every
+power-on; the V600 is one of them. SilverFast does not do this; on Windows, Epson's WIA
 driver (`esxw2ud.dll`) does it when the scanner is plugged in. Without it,
 SilverFast fails with "Can't write exStatusCommand".
 
@@ -144,8 +152,9 @@ it is the only firmware protocol implemented so far.
 - requires a per-session random token (`usbd.token`, mode `0600`) in the first
   message of every connection. The launcher creates it and passes it to Wine in
   `SFL_USBD_TOKEN`; without it, other local users could reach the TCP port;
-- reads in whole 512-byte packets. SilverFast asks for exact byte counts, but
-  the V600 sometimes sends more than requested; an exact-size bulk read then
+- reads in whole USB packets (512 bytes on the V600). SilverFast asks for
+  exact byte counts, but scanners can send more than requested — the V600
+  does; an exact-size bulk read then
   fails with an overflow error and, after enough errors, the scanner resets
   itself. Surplus bytes are kept in a buffer for the next request
   (`helper/src/rxbuf.c`);

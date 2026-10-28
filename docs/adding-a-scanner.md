@@ -1,7 +1,8 @@
 # Adding a scanner
 
-silverfast-linux v0.1 supports the Epson Perfection V600. Support for another
-scanner needs a few facts about it — most of them can be collected
+silverfast-linux works with any scanner in its [catalog](../models/); the
+Epson Perfection V600 is the reference scanner it is developed and tested on.
+Adding another scanner needs a few facts about it — most of them can be collected
 automatically. This page explains how to collect them (if you own the scanner)
 and how they turn into support (if you maintain the project).
 
