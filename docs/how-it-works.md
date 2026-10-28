@@ -4,11 +4,17 @@ This document explains what happens between SilverFast and your scanner, how
 each piece was discovered, and why the project is built the way it is. If you
 only want to scan, the [README](../README.md) is enough.
 
+Nothing here is specific to one scanner: model details live in the
+[scanner catalog](#the-scanner-catalog). The examples use the **Epson
+Perfection V600**, the reference scanner the project was reverse-engineered
+and tested with; values that differ per scanner are marked as such.
+
 - [The problem](#the-problem)
 - [Architecture](#architecture)
 - [What SilverFast expects from Windows](#what-silverfast-expects-from-windows)
-- [The V600 firmware upload](#the-v600-firmware-upload)
+- [Firmware upload (Epson)](#firmware-upload-epson)
 - [The USB helper](#the-usb-helper)
+- [The scanner catalog](#the-scanner-catalog)
 - [Installing SilverFast without its installer](#installing-silverfast-without-its-installer)
 - [Design decisions](#design-decisions)
 - [How the findings were made](#how-the-findings-were-made)
@@ -39,17 +45,17 @@ flowchart LR
         STI --> REG[("registry:<br/>Image device class")]
     end
     STI -->|"Unix socket (Wine Staging)<br/>or loopback TCP + token"| USBD["silverfast-usbd<br/>(this project, Linux)"]
-    USBD -->|"libusb bulk transfers"| SCN["Epson V600"]
+    USBD -->|"libusb bulk transfers"| SCN["Scanner<br/>(e.g. Epson V600)"]
     USBD -. "firmware upload<br/>on first open" .-> SCN
 ```
 
 | Piece | Runs on | Role |
 |---|---|---|
 | `sti.dll` | Wine | Lists the scanners registered in the prefix, creates `IStiDevice` objects and forwards their raw reads and writes to the helper. |
-| `silverfast-usbd` | Linux | Owns the USB device through libusb, uploads firmware when needed, serves raw I/O over a Unix socket. |
+| `silverfast-usbd` | Linux | Owns the USB device through libusb, uploads firmware when needed, serves raw I/O over a Unix socket or token-protected loopback TCP. |
 | `silverfast-linux` | Linux | Installs everything into a dedicated Wine prefix and launches the helper together with SilverFast. |
 | `models/*.json` | — | The scanner catalog: everything model-specific (USB ID, driver download, interpreter, firmware, registry values). |
-| `esxuina1.dll`, `esfwa1.bin` | Wine / Linux | Epson's protocol interpreter and the V600 firmware, downloaded from Epson. |
+| Driver files, e.g. `esxuina1.dll`, `esfwa1.bin` | Wine / Linux | Taken from the scanner maker's Windows driver as the catalog entry says; for the V600, Epson's protocol interpreter and firmware. |
 
 ## What SilverFast expects from Windows
 
@@ -68,11 +74,12 @@ disassembling the relevant functions.
    and reads:
    - `DeviceID` — must equal the device's internal STI name
      (`{6BDD1FC6-…}\NNNN`). Without it the device is silently ignored.
-   - `MatchingDeviceId` — `usb\vid_04b8&pid_013a`; the USB IDs select the
-     scanner model (shown as "Epson V600 / GT-X820").
+   - `MatchingDeviceId` — the scanner's USB IDs, e.g. `usb\vid_04b8&pid_013a`
+     for the V600; they select the scanner model (shown as "Epson V600 /
+     GT-X820").
 
 On a real Windows system the STI class installer writes these values when the
-Epson driver is installed. Under Wine, `silverfast-linux install` writes them.
+scanner's driver is installed. Under Wine, `silverfast-linux install` writes them.
 
 ### Opening the scanner
 
@@ -89,19 +96,21 @@ Failing either check produces SilverFast's "Lock failed!" error. After that it
 calls `CreateDevice`, `LockDevice`, and does all communication with
 `RawWriteData` / `RawReadData`, then `UnLockDevice` and `Release`.
 
-### The Epson interpreter
+### The Epson interpreter (scanners with `ExtCmdModule`)
 
-The V600 does not speak Epson's ESC/I command language natively. Epson ships a
+Some scanners, like the V600, do not speak Epson's ESC/I command language
+natively; their driver names an interpreter in `DeviceData\ExtCmdModule`. Epson ships a
 host-side "interpreter" (`esxuina1.dll` for x64) that translates ESC/I into the
 scanner's low-level protocol. SilverFast loads it from `system32` (falling back
 from a hard-coded Windows driver-store path), calls `INTInit(read_cb, write_cb)`
 and then sends ESC/I through `INTWrite`/`INTRead`. The callbacks end up in
 `IStiDevice::RawReadData`/`RawWriteData`, chunked to at most 0xFFFF bytes.
 
-## The V600 firmware upload
+## Firmware upload (Epson)
 
-The V600 boots without operational firmware and needs it uploaded into RAM
-after every power-on. SilverFast does not do this; on Windows, Epson's WIA
+Scanners whose driver names a firmware file (`DeviceData\ExtBinModule`) boot
+without operational firmware and need it uploaded into RAM after every
+power-on; the V600 is one of them. SilverFast does not do this; on Windows, Epson's WIA
 driver (`esxw2ud.dll`) does it when the scanner is plugged in. Without it,
 SilverFast fails with "Can't write exStatusCommand".
 
@@ -122,7 +131,9 @@ The sequence below is taken from `CWIADriver::InitScanner` and
    - send `80`, expect `06`
 
 This only writes to the scanner's RAM; nothing is flashed. It is implemented in
-`helper/src/firmware.c` and unit-tested against a scripted fake device.
+`helper/src/firmware.c` and unit-tested against a scripted fake device. A
+catalog entry selects it with `"firmware": {"file": …, "protocol": "epson"}`;
+it is the only firmware protocol implemented so far.
 
 ## The USB helper
 
@@ -141,8 +152,9 @@ This only writes to the scanner's RAM; nothing is flashed. It is implemented in
 - requires a per-session random token (`usbd.token`, mode `0600`) in the first
   message of every connection. The launcher creates it and passes it to Wine in
   `SFL_USBD_TOKEN`; without it, other local users could reach the TCP port;
-- reads in whole 512-byte packets. SilverFast asks for exact byte counts, but
-  the V600 sometimes sends more than requested; an exact-size bulk read then
+- reads in whole USB packets (512 bytes on the V600). SilverFast asks for
+  exact byte counts, but scanners can send more than requested — the V600
+  does; an exact-size bulk read then
   fails with an overflow error and, after enough errors, the scanner resets
   itself. Surplus bytes are kept in a buffer for the next request
   (`helper/src/rxbuf.c`);
@@ -228,10 +240,16 @@ tries the Unix socket first and falls back to TCP.
 whole WIA service under Wine. The upload is short and well understood, so the
 helper performs it — the same bytes Epson's driver sends.
 
-**Download vendor files at install time.** Neither SilverFast nor Epson's files
-may be redistributed. The installer fetches them from the vendors and verifies
-them: SilverFast against LaserSoft's published SHA-1s, the Epson driver and the
-two files taken from it against pinned SHA-256s.
+**Download vendor files at install time.** Neither SilverFast nor scanner
+makers' files may be redistributed. The installer fetches them from the vendors
+and verifies them: SilverFast against LaserSoft's published SHA-1s, each
+scanner driver package and the files taken from it against the SHA-256s pinned
+in its catalog entry.
+
+**Scanners as data.** Everything model-specific lives in `models/*.json`, and
+those values are exactly what Windows reads from the driver's INF. New scanners
+therefore need a data file — which `report` generates — rather than code, and
+the helper and `sti.dll` stay model-agnostic.
 
 **A dedicated Wine prefix.** SilverFast, the `sti.dll` override and the device
 registration stay out of your other Wine prefixes.

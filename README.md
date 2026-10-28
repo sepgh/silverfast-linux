@@ -2,12 +2,11 @@
 
 # silverfast-linux
 
-**Run SilverFast 9 on Linux and scan with your Epson Perfection V600 — no Windows VM required.**
+**Run SilverFast 9 on Linux and scan with your USB scanner — no Windows VM required.**
 
 [![CI](https://github.com/sepgh/silverfast-linux/actions/workflows/ci.yml/badge.svg)](https://github.com/sepgh/silverfast-linux/actions/workflows/ci.yml)
 ![Wine 9+](https://img.shields.io/badge/Wine-9%2B-8b0000)
-![Scanner: Epson V600](https://img.shields.io/badge/scanner-Epson%20V600-0b5394)
-![Status: v1](https://img.shields.io/badge/status-v1-2e7d32)
+![Tested with: Epson V600](https://img.shields.io/badge/tested%20with-Epson%20V600-0b5394)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/sepgh/silverfast-linux)](https://github.com/sepgh/silverfast-linux/releases/latest)
 
@@ -22,7 +21,12 @@ software, popular for film and photo scanning. It is only available for
 Windows and macOS. silverfast-linux runs the **Windows build of SilverFast 9
 under Wine** and supplies the two pieces Wine is missing to reach a scanner: a
 working Windows still-image layer (`sti.dll`) and a small Linux helper that
-talks to the scanner over USB.
+talks to the scanner over USB. Scanners are described as data in a
+[scanner catalog](models/), so any scanner SilverFast supports through the
+standard Windows scanner stack can be added without code.
+
+The **Epson Perfection V600** is the reference scanner: everything is
+developed and tested on it, and it works end to end.
 
 > [!NOTE]
 > This is an unofficial community project. It is not affiliated with or
@@ -37,12 +41,16 @@ talks to the scanner over USB.
 | SilverFast 9 UI, MySilverFast login | ✅ |
 | Scanner detection, firmware loading | ✅ automatic, on every power-on |
 | Prescan | ✅ |
-| Full scans | ✅ tested at 1600 dpi, 48-bit, 261 MB with zero USB errors |
-| Scanners | Epson Perfection V600 Photo (`04b8:013a`) — see the [scanner catalog](models/) |
+| Full scans | ✅ tested on the V600 at 1600 dpi, 48-bit, 261 MB with zero USB errors |
+| Scanners | Every scanner in the [catalog](models/): *supported* ones are confirmed, *experimental* ones are generated from their Windows drivers and waiting for a tester |
+| Reference scanner | Epson Perfection V600 Photo (`04b8:013a`) — used for all development and testing, works end to end |
 | SilverFast edition | Whatever your MySilverFast account unlocks (tested with SE) |
 | Tested on | Fedora 43, Wine 11 (Staging) with the scanner; CI covers Ubuntu 24.04, Wine 9 |
 
-Other scanners are not supported yet — [help add yours](#want-support-for-your-scanner).
+Today the catalog's only confirmed entry is the V600. Other scanners that
+SilverFast supports on Windows are likely to work the same way — check
+`silverfast-linux scanners`, try yours with `silverfast-linux try-scanner`, and
+[help add it](#want-support-for-your-scanner).
 
 ## Quick start
 
@@ -119,13 +127,16 @@ silverfast-linux install --accept-vendor-licenses
 ```
 
 This creates a dedicated Wine prefix, downloads SilverFast 9 from LaserSoft and
-the V600 driver from Epson, verifies every file, and registers the scanner.
-Downloads are about 260 MB; the result needs about 1.1 GB.
+each scanner's Windows driver from its manufacturer (as listed in the
+[scanner catalog](models/)), verifies every file, and registers the scanners.
+It sets up every *supported* scanner plus any connected catalog scanner; pick
+specific ones with `--scanner ID` (see `silverfast-linux scanners`).
+Downloads are about 260 MB plus the drivers; the result needs about 1.1 GB.
 
 **4. Allow your user to access the scanner** (once, needs root)
 
 ```sh
-silverfast-linux udev    # prints the two commands to run
+silverfast-linux udev    # writes udev rules for the catalog's scanners and prints the two commands to run
 ```
 
 Then unplug and replug the scanner.
@@ -136,8 +147,9 @@ Then unplug and replug the scanner.
 silverfast-linux run     # or start "SilverFast 9" from your application menu
 ```
 
-Log in with your MySilverFast account, pick **Epson V600 / GT-X820**, press
-**START**. On the first launch SilverFast asks you to choose a dark or light
+Log in with your MySilverFast account, pick your scanner (e.g. **Epson V600 /
+GT-X820**), press **START**. If several installed scanners are connected,
+choose one with `silverfast-linux run --scanner ID`. On the first launch SilverFast asks you to choose a dark or light
 look.
 
 Check your setup any time with:
@@ -151,8 +163,9 @@ silverfast-linux doctor
 ```mermaid
 flowchart LR
     SF["SilverFast 9<br/>(Windows, in Wine)"] -->|"STI API"| STI["sti.dll<br/>(this project)"]
-    STI -->|"Unix socket"| USBD["silverfast-usbd<br/>(this project, Linux)"]
-    USBD -->|"libusb"| V600["Epson V600"]
+    STI -->|"Unix socket or<br/>loopback TCP + token"| USBD["silverfast-usbd<br/>(this project, Linux)"]
+    USBD -->|"libusb"| SCN["Scanner<br/>(e.g. Epson V600)"]
+    CAT[("models/*.json<br/>scanner catalog")] -.-> USBD
 ```
 
 - **`sti.dll`** replaces Wine's stub. It tells SilverFast which scanners exist
@@ -160,16 +173,18 @@ flowchart LR
   scanner reads and writes to the helper.
 - **`silverfast-usbd`** owns the USB device on the Linux side. It is reached
   over a private Unix socket (Wine Staging) or a loopback port protected by a
-  per-session token (regular Wine). It uploads the
-  V600's firmware when the scanner was just switched on (exactly what Epson's
-  Windows driver does), and moves data in whole USB packets, which the V600
-  needs.
+  per-session token (regular Wine). It uploads the scanner's firmware when it
+  was just switched on (exactly what Epson's Windows driver does for the
+  V600), and moves data in whole USB packets, which the V600 needs.
 - **`silverfast-linux`** installs everything into its own Wine prefix and
   starts the helper together with SilverFast.
+- **The [scanner catalog](models/)** holds everything model-specific — USB ID,
+  driver download and checksums, interpreter, firmware, registry values — as
+  one JSON file per scanner, so supporting a scanner needs no code.
 
 SilverFast talks to the V600 through Epson's own protocol interpreter
 (`esxuina1.dll`), which the installer takes from Epson's official driver
-package along with the firmware.
+package along with the firmware, as its catalog entry describes.
 
 The full story — what SilverFast expects, how the firmware upload works, and
 why the project is designed this way — is in
@@ -190,9 +205,10 @@ desktop application.
 | `silverfast-linux scanners` | List the scanner catalog and which scanners are connected. |
 | `silverfast-linux drivers [--device VID:PID]` | Show where to get a scanner's Windows driver, including Microsoft Update Catalog matches; `--download UPDATE_ID` fetches one. |
 | `silverfast-linux doctor` | Check Wine, the installation, the scanner and its permissions. |
-| `silverfast-linux udev` | Show how to grant USB access to the scanner. |
+| `silverfast-linux udev` | Write udev rules for every catalog scanner and show how to install them. |
 | `silverfast-linux report --driver FILE\|URL` | Collect what is needed to support a new scanner (Markdown for an issue). |
-| `silverfast-linux try-scanner --driver FILE\|URL` | Experimental: try an unsupported scanner in SilverFast with full logging. |
+| `silverfast-linux try-scanner --driver FILE\|URL [--device VID:PID]` | Experimental: try an unsupported scanner in SilverFast with full logging. |
+| `silverfast-linux version` | Print the installed version. |
 | `silverfast-linux uninstall [--purge]` | Remove the prefix (and with `--purge`, the download cache). |
 
 **Where things live**
@@ -200,9 +216,11 @@ desktop application.
 | Path | Contents |
 |---|---|
 | `~/.local/share/silverfast-linux/prefix` | The Wine prefix with SilverFast |
-| `~/.local/share/silverfast-linux/firmware` | V600 firmware used by the helper |
+| `~/.local/share/silverfast-linux/firmware` | Scanner firmware used by the helper |
+| `~/.local/share/silverfast-linux/scanners.txt` | Installed scanners and their registry slots |
 | `~/.local/share/silverfast-linux/logs` | `usbd.log`, `sti.log`, `wine.log` |
-| `~/.cache/silverfast-linux` | Downloaded vendor archives |
+| `~/.local/share/silverfast-linux/try` | `try-scanner` sessions (draft model, driver files, logs) |
+| `~/.cache/silverfast-linux` | Downloaded SilverFast archives and scanner drivers |
 
 **Saving scans to your home folder:** in SilverFast's file dialogs, drive
 `Z:` is your Linux root, so `Z:\home\<you>\Pictures` is your Pictures folder.
@@ -261,8 +279,8 @@ saves its preferences on a normal exit.
 <summary><b>The installer reports a checksum mismatch</b></summary>
 
 A vendor changed a file. For SilverFast this means a broken download — re-run
-the install. For the Epson driver, open an issue: its hashes are pinned in
-`scripts/silverfast-linux` and need updating.
+the install. For a scanner driver, open an issue: its hashes are pinned in the
+scanner's file in [`models/`](models/) and need updating.
 </details>
 
 ## Want support for your scanner?
@@ -287,7 +305,9 @@ exactly what the report contains.
 
 ## Roadmap
 
-- **v1 (this release):** Epson Perfection V600, Linux helper + `sti.dll`.
+- **Done:** Linux helper + `sti.dll`, verified on the Epson Perfection V600
+  (0.1); scanner catalog, reports, `try-scanner` and driver lookup so other
+  scanners can be added as data (0.2).
 - **Pure Wine:** a `usbscan.sys` driver so no helper process is needed and
   the work can go upstream into Wine.
 - **More scanners:** the [catalog](models/) is data-driven and reports
@@ -303,7 +323,8 @@ If you own another scanner and want to help test, please open an issue.
 - [Scanner catalog](models/README.md) — the model file format
 - [Changelog](CHANGELOG.md)
 - [Development](docs/development.md) — building, tests, debugging, layout
-- [v1 design spec](docs/superpowers/specs/2026-10-27-silverfast-linux-v1-design.md)
+- Design notes: [v1](docs/superpowers/specs/2026-10-27-silverfast-linux-v1-design.md),
+  [scanner catalog](docs/superpowers/specs/2026-10-28-scanner-catalog-design.md)
 - [Future plan](docs/plans/future-pure-wine-and-more-scanners.md)
 
 ## Contributing

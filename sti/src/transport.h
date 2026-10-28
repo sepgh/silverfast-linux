@@ -1,4 +1,5 @@
-/* Transport used by IStiDevice raw I/O: a Unix socket to silverfast-usbd.
+/* Transport used by IStiDevice raw I/O: a connection to silverfast-usbd over
+ * its Unix socket, or loopback TCP where Wine lacks AF_UNIX.
  * Kept behind this small interface so a future usbscan.sys based backend
  * (docs/plans/future-pure-wine-and-more-scanners.md) can replace it. */
 #ifndef SFL_TRANSPORT_H

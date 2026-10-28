@@ -11,7 +11,7 @@ helper/src/        silverfast-usbd (Linux, C, libusb)
 helper/tests/      unit tests with fake devices
 sti/src/           sti.dll replacement (Windows, C, MinGW)
   sti.c              IStillImageW / IStiDevice, registry device database
-  transport.c/.h     Unix-socket client for silverfast-usbd
+  transport.c/.h     client for silverfast-usbd (Unix socket, else loopback TCP)
   log.c/.h           diagnostics
 sti/tests/         sti_selftest.exe, run under Wine
 tests/mock_usbd.py mock helper used by the sti.dll self-test
@@ -57,7 +57,8 @@ on the host.
 
 ## Releasing
 
-1. Set `VERSION=` in `scripts/silverfast-linux`.
+1. Set `VERSION=` in `scripts/silverfast-linux`, add the release to
+   `CHANGELOG.md`, and update the download links in `README.md`.
 2. `make release` builds in an Ubuntu 22.04 container (so the helper needs
    only glibc 2.34+) and runs the unit tests. Artifacts land in
    `build-release/`: `silverfast-linux-<version>-x86_64.tar.gz`, laid out like
@@ -91,7 +92,8 @@ on the host.
 | sti.dll decisions | `~/.local/share/silverfast-linux/logs/sti.log` |
 | SilverFast's own log | `<prefix>/drive_c/users/$USER/AppData/Roaming/LaserSoft Imaging/SilverFast 9/LogFile.txt` |
 | Wine output | `~/.local/share/silverfast-linux/logs/wine.log`; add channels with e.g. `WINEDEBUG=+loaddll silverfast-linux run` |
-| Run the helper by hand | `build/silverfast-usbd --firmware-dir ~/.local/share/silverfast-linux/firmware --verbose` (add `--tcp-port-file FILE` with `SFL_USBD_TOKEN=...` for the TCP endpoint) |
+| Run the helper by hand | `build/silverfast-usbd --device 04b8:013a --firmware esfwa1.bin --firmware-dir ~/.local/share/silverfast-linux/firmware --verbose` (add `--tcp-port-file FILE` with `SFL_USBD_TOKEN=...` for the TCP endpoint) |
+| Inspect the catalog | `scripts/sfl-models.py list`, `validate`, `registry ID 0000`, `udev`, `drivers VID:PID` |
 
 ## Adding a scanner
 
