@@ -43,7 +43,7 @@ developed and tested on it, and it works end to end.
 | SilverFast 9 UI, MySilverFast login | ✅ |
 | Scanner detection, firmware loading | ✅ automatic, on every power-on |
 | Prescan | ✅ |
-| Full scans | ✅ tested at 1600 dpi, 48-bit, 261 MB with zero USB errors |
+| Full scans | ✅ tested on the V600 at 1600 dpi, 48-bit, 261 MB with zero USB errors |
 | Scanners | Every scanner in the [catalog](models/): *supported* ones are confirmed, *experimental* ones are generated from their Windows drivers and waiting for a tester |
 | Reference scanner | Epson Perfection V600 Photo (`04b8:013a`) — used for all development and testing, works end to end |
 | SilverFast edition | Whatever your MySilverFast account unlocks (tested with SE) |
