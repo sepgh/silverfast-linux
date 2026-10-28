@@ -60,11 +60,15 @@ Other scanners are not supported yet — [help add yours](#want-support-for-your
 with glibc 2.34 or newer (Ubuntu 22.04, Debian 12, Fedora 35 and later):
 
 ```sh
-curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.1.0/silverfast-linux-0.1.0-x86_64.tar.gz
-curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.1.0/SHA256SUMS
+curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.2.0/silverfast-linux-0.2.0-x86_64.tar.gz
+curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.2.0/SHA256SUMS
 sha256sum -c SHA256SUMS
-tar -xzf silverfast-linux-0.1.0-x86_64.tar.gz -C ~/.local --strip-components=1
+tar -xzf silverfast-linux-0.2.0-x86_64.tar.gz -C ~/.local --strip-components=1
 ```
+
+Upgrading from an earlier release: extract the new tarball the same way, then
+re-run `silverfast-linux install --accept-vendor-licenses` (downloads are
+cached) so the prefix gets the new `sti.dll` and scanner registrations.
 
 This puts `silverfast-linux` in `~/.local/bin` (make sure it is on your
 `PATH`) and its files in `~/.local/lib/silverfast-linux`. All releases are on
@@ -297,6 +301,7 @@ If you own another scanner and want to help test, please open an issue.
 - [How it works](docs/how-it-works.md) — architecture, reverse-engineering findings, design decisions
 - [Adding a scanner](docs/adding-a-scanner.md) — collecting data for a new scanner, and turning it into support
 - [Scanner catalog](models/README.md) — the model file format
+- [Changelog](CHANGELOG.md)
 - [Development](docs/development.md) — building, tests, debugging, layout
 - [v1 design spec](docs/superpowers/specs/2026-10-27-silverfast-linux-v1-design.md)
 - [Future plan](docs/plans/future-pure-wine-and-more-scanners.md)
