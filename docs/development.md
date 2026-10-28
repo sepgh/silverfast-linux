@@ -37,11 +37,21 @@ make            # build/silverfast-usbd and build/sti.dll
 make test       # unit tests + sti.dll self-test (needs wine and python3)
 ```
 
+`make` checks for the libusb headers (via `pkg-config libusb-1.0`) and for
+`x86_64-w64-mingw32-gcc` before compiling, and stops with a message naming
+the missing piece. Override the compilers with `CC=` and `MINGW_CC=`.
+
 Without installing compilers, build inside a container (podman or docker):
 
 ```sh
 make container
 ```
+
+This builds `build-env/Containerfile` (Fedora with gcc, libusb headers and
+MinGW) and compiles into the same `build/` directory, including the test
+binaries. `make install` and `make test` afterwards reuse those outputs
+without needing the toolchain; `make test` still needs `wine` and `python3`
+on the host.
 
 ## Tests
 

@@ -53,16 +53,42 @@ Other scanners are not supported yet — see the [roadmap](#roadmap).
 | Debian / Ubuntu | `sudo apt install wine64 p7zip-full curl python3 libusb-1.0-0` |
 | Arch | `sudo pacman -S wine 7zip curl python libusb` |
 
-Building also needs a C compiler, libusb headers and MinGW — or just
-`podman`/`docker`, see [step 2](#2-build).
-
 **2. Build**
 
 ```sh
 git clone https://github.com/sepgh/silverfast-linux.git
 cd silverfast-linux
-make            # or: make container   (builds inside podman/docker, no compilers needed)
-make install    # installs to ~/.local (bin/silverfast-linux, lib/silverfast-linux/)
+```
+
+Pick **one** way to build:
+
+- **In a container** (easiest: needs only `podman` or `docker`, no compilers):
+
+  ```sh
+  make container
+  ```
+
+- **Natively**, after installing the build tools — a C compiler, the libusb
+  development headers and the MinGW-w64 cross-compiler (used for `sti.dll`):
+
+  | Distribution | Build packages |
+  |---|---|
+  | Fedora | `sudo dnf install gcc make pkgconf libusb1-devel mingw64-gcc` |
+  | Debian / Ubuntu | `sudo apt install gcc make pkg-config libusb-1.0-0-dev gcc-mingw-w64-x86-64` |
+  | Arch | `sudo pacman -S gcc make pkgconf libusb mingw-w64-gcc` |
+
+  ```sh
+  make
+  ```
+
+  If a build tool is missing, `make` stops with a message saying which one,
+  e.g. *libusb-1.0 development headers not found*.
+
+Then install (to `~/.local/bin` and `~/.local/lib/silverfast-linux`; make
+sure `~/.local/bin` is on your `PATH`). It reuses what either build produced:
+
+```sh
+make install
 ```
 
 **3. Install SilverFast and the scanner support**
@@ -157,6 +183,14 @@ desktop application.
 `Z:` is your Linux root, so `Z:\home\<you>\Pictures` is your Pictures folder.
 
 ## Troubleshooting
+
+<details>
+<summary><b><code>make</code> fails: "libusb.h: No such file or directory" or "MinGW-w64 not found"</b></summary>
+
+The build tools are missing. Either install the build packages listed in
+[step 2](#quick-start), or build without them using `make container`
+(podman or docker), then run `make install`.
+</details>
 
 <details>
 <summary><b>"No Scanner available" in SilverFast</b></summary>

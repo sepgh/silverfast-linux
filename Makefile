@@ -31,10 +31,14 @@ sti: $(BUILD)/sti.dll
 $(BUILD):
 	mkdir -p $@
 
+MISSING_HINT := install the build dependencies (see docs/development.md) or run "make container" to build inside podman/docker
+
 $(BUILD)/silverfast-usbd: $(HELPER_SRC) helper/src/*.h | $(BUILD)
+	@pkg-config --exists libusb-1.0 2>/dev/null || { echo "error: libusb-1.0 development headers not found; $(MISSING_HINT)"; exit 1; }
 	$(CC) $(CFLAGS) $(WARN) $(LIBUSB_CFLAGS) -o $@ $(HELPER_SRC) $(LIBUSB_LIBS)
 
 $(BUILD)/sti.dll: $(STI_SRC) sti/src/*.h sti/src/sti.def helper/src/protocol.h | $(BUILD)
+	@command -v $(MINGW_CC) >/dev/null || { echo "error: $(MINGW_CC) (MinGW-w64) not found; $(MISSING_HINT)"; exit 1; }
 	$(MINGW_CC) $(CFLAGS) $(WARN) -shared -static-libgcc -o $@ $(STI_SRC) sti/src/sti.def -lole32 -luuid -lws2_32
 
 $(BUILD)/sti_selftest.exe: sti/tests/sti_selftest.c | $(BUILD)
