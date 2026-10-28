@@ -6,6 +6,7 @@ automatically. This page explains how to collect them (if you own the scanner)
 and how they turn into support (if you maintain the project).
 
 - [For scanner owners](#for-scanner-owners)
+  - [0. Is it already in the catalog?](#0-is-it-already-in-the-catalog)
   - [1. Check that SilverFast supports your scanner](#1-check-that-silverfast-supports-your-scanner)
   - [2. Get the Windows driver](#2-get-the-windows-driver)
   - [3. Create a report](#3-create-a-report)
@@ -15,6 +16,17 @@ and how they turn into support (if you maintain the project).
 - [For maintainers](#for-maintainers)
 
 ## For scanner owners
+
+### 0. Is it already in the catalog?
+
+```sh
+silverfast-linux scanners
+```
+
+lists every scanner silverfast-linux knows and marks the connected ones.
+`supported` models are installed by default; an `experimental` one is
+installed when it is connected (or with `install --scanner ID`) — try it and
+report how it went.
 
 ### 1. Check that SilverFast supports your scanner
 
@@ -28,6 +40,15 @@ Download your scanner's **Windows 10/11 64-bit** driver from the
 manufacturer's support site (for Epson: the "Scanner Driver and EPSON Scan
 Utility" or "Epson Scan 2" package). Keep the downloaded file or note its
 download link; you do not need to run it.
+
+`silverfast-linux drivers` helps: for the connected scanner it shows the
+catalog's driver (if any) and searches the
+[Microsoft Update Catalog](https://www.catalog.update.microsoft.com) for
+Windows Update drivers matching its USB ID. Fetch a listed entry with
+`silverfast-linux drivers --download UPDATE_ID`. Microsoft's catalog only has
+drivers some manufacturers publish through Windows Update (it has Canon
+imaging drivers, but not the V600's), so the manufacturer's site remains the
+main source.
 
 The driver tells us how Windows talks to the scanner: whether it uses the
 standard Windows USB scanner stack, and whether the scanner needs a protocol
@@ -96,6 +117,7 @@ fill in the form and attach the report file.
 | SANE | `scanimage -L` | Whether a Linux driver exists, which hints at the protocol |
 | Windows driver | the driver package | INF entry for this exact USB ID: model name, `Needs = STI.USBSection` (standard USB scanner stack), `DeviceType`/`DeviceSubType`/`Capabilities`, `DeviceData` with `ExtCmdModule` (protocol interpreter) and `ExtBinModule` (firmware), and the files it installs with their CPU architecture |
 | doctor | `silverfast-linux doctor` | State of the installation |
+| Draft catalog entry | the driver package | The scanner as a `models/*.json` file, with every SHA-256 filled in |
 | Try session (try-scanner only) | `usbd.log`, `sti.log`, SilverFast `LogFile.txt` | Which STI calls SilverFast made, every USB transfer, and SilverFast's own error messages |
 
 ## For maintainers
@@ -119,17 +141,21 @@ fill in the form and attach the report file.
 
 ### Adding the model
 
-Until models move to data files (see the
-[future plan](plans/future-pure-wine-and-more-scanners.md#part-b--more-scanners)):
+Scanners are data: one JSON file per model in `models/`
+([format](../models/README.md)); the installer, launcher, udev rules and
+helper read everything from there.
 
-1. Add a row to `sfl_models[]` in `helper/src/models.h` (USB ID, name,
-   firmware file name, endpoints, packet size).
-2. Teach `scripts/silverfast-linux install` to fetch the model's driver
-   (URL + pinned SHA-256s), extract its `ExtCmdModule`/`ExtBinModule`, and
-   write the registry entry. The JSON that `try-scanner` stores in
-   `~/.local/share/silverfast-linux/try/<date>/model.json` has every value the
-   registry needs.
-3. Add the udev rule line for the USB ID.
-4. Ask the reporter to run the hardware checklist from the
+1. Copy the report's **Draft catalog entry** to `models/<id>.json`.
+2. Set `driver.url` to the official download link if the draft lacks it.
+3. Leave `status: experimental` and run `make test-report`, which validates
+   every model file.
+4. Open a pull request. Once merged, owners get the scanner with
+   `silverfast-linux install --accept-vendor-licenses` while it is connected.
+5. After a reporter confirms the hardware checklist from the
    [v1 design spec](superpowers/specs/2026-10-27-silverfast-linux-v1-design.md#testing)
-   and attach `SFL_VERBOSE=1` logs to the pull request.
+   (with `SFL_VERBOSE=1` logs), switch `status` to `supported` and fill in
+   `tested`.
+
+Scanners that need more than data — a firmware protocol other than Epson's,
+or a Windows stack other than `STI.USBSection` — need code; see the
+[future plan](plans/future-pure-wine-and-more-scanners.md).

@@ -63,7 +63,7 @@ body:
     id: driver
     attributes:
       label: Windows driver download
-      description: Link to the Windows 10/11 64-bit driver you used for the report (the vendor's download page or the file link).
+      description: Link to the Windows 10/11 64-bit driver you used for the report (the vendor's download page or the file link). `silverfast-linux drivers` can help find one.
       placeholder: https://ftp.epson.com/drivers/....exe
     validations:
       required: true

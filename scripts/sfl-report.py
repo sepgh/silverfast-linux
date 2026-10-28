@@ -25,6 +25,17 @@ import subprocess
 import sys
 import tempfile
 
+def _load_models_module():
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sfl-models.py")
+    spec = importlib.util.spec_from_file_location("sfl_models", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+catalog = _load_models_module()
+
 SKIP_CLASSES = {0x01: "audio", 0x03: "HID", 0x08: "mass storage", 0x09: "hub", 0x0e: "video",
                 0xe0: "wireless", 0x02: "communications", 0x0a: "CDC data", 0x0b: "smart card"}
 SCANNER_CLASSES = {0x06: "still image", 0x07: "printer (MFP)", 0xff: "vendor specific"}
@@ -117,18 +128,6 @@ def device_node(dev):
 
 # ------------------------------------------------------- Windows driver (INF)
 
-def extract_recursive(src, dest, depth=0):
-    """Unpacks installers/archives with 7z, then any archives found inside."""
-    if depth > 3 or not shutil.which("7z"):
-        return
-    out = os.path.join(dest, f"x{depth}_{os.path.basename(src)}")
-    subprocess.run(["7z", "x", "-y", "-bso0", "-bse0", "-bsp0", f"-o{out}", src], capture_output=True)
-    for root, _, files in os.walk(out):
-        for f in files:
-            if f.lower().endswith((".cab", ".zip", ".msi", ".exe")) and os.path.getsize(os.path.join(root, f)) > 4096:
-                extract_recursive(os.path.join(root, f), dest, depth + 1)
-
-
 def decode_inf(raw):
     if raw[:2] in (b"\xff\xfe", b"\xfe\xff") or raw[1:2] == b"\0":
         return raw.decode("utf-16", errors="replace")
@@ -194,20 +193,22 @@ def unquote(v):
     return v.strip().strip('"')
 
 
-def analyse_driver(path, vid, pid, keep_dir=None):
-    """Returns (markdown, model). model describes the scanner for try-scanner;
-    with keep_dir, the interpreter/firmware named in DeviceData are copied there."""
+def slug(text):
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "scanner"
+
+
+def analyse_driver(path, vid, pid, keep_dir=None, url=None):
+    """Returns (markdown, model). model is a draft catalog entry (see
+    models/README.md); with keep_dir, the interpreter/firmware named in
+    DeviceData are copied there."""
     model = {}
     lines = [f"Package: `{os.path.basename(path)}` ({os.path.getsize(path)} bytes)  ",
              f"SHA-256: `{hashlib.sha256(open(path, 'rb').read()).hexdigest()}`\n"]
     hwid = f"usb\\vid_{vid}&pid_{pid}".lower()
     work = tempfile.mkdtemp(prefix="sfl-report-")
     try:
-        extract_recursive(path, work)
-        files = {}
-        for root, _, fs in os.walk(work):
-            for f in fs:
-                files.setdefault(f.lower(), os.path.join(root, f))
+        catalog.extract_recursive(path, work)
+        files = catalog.index_files(work)
         infs = [p for n, p in files.items() if n.endswith(".inf")]
         lines.append(f"Files in package: {len(files)}, INF files: {len(infs)}\n")
         matched = False
@@ -241,23 +242,37 @@ def analyse_driver(path, vid, pid, keep_dir=None):
                 continue
             body = keyvals(sections.get(inst.lower(), []))
             info = {k.lower(): v for k, v in body}
+            vendor = subst(ver.get("provider", ""), strings).strip('"')
+            device_data = {a: unquote(subst(b, strings))
+                           for a, b in keyvals(sections.get(info.get("devicedata", "").lower(), []))}
             model.update({
-                "vid": vid, "pid": pid, "name": best[1],
-                "vendor": subst(ver.get("provider", ""), strings).strip('"'),
-                "inf": os.path.basename(inf), "install_section": inst,
-                "device_type": int(info.get("devicetype", "1"), 0),
-                "device_subtype": int(info.get("devicesubtype", "1"), 0),
-                "capabilities": int(info.get("capabilities", "0"), 0),
-                "usbscan": "sti.usbsection" in info.get("needs", "").lower(),
-                "device_data": {a: unquote(subst(b, strings)) for a, b in keyvals(sections.get(info.get("devicedata", "").lower(), []))},
+                "id": slug(best[1]), "name": best[1], "vendor": vendor, "usb": f"{vid}:{pid}",
+                "status": "experimental",
+                "tested": "not yet",
+                "driver": {"url": url or "", "sha256": catalog.sha256_file(path),
+                           "info": f"{os.path.basename(path)}, {ver.get('driverver', '')}", "files": {}},
+                "registry": {
+                    "inf": os.path.basename(inf).lower(), "install_section": inst,
+                    "device_type": int(info.get("devicetype", "1"), 0),
+                    "device_subtype": int(info.get("devicesubtype", "1"), 0),
+                    "capabilities": int(info.get("capabilities", "0"), 0),
+                    "device_data": device_data,
+                },
+                "_usbscan": "sti.usbsection" in info.get("needs", "").lower(),
             })
             for key in ("ExtCmdModule", "ExtBinModule"):
-                name = model["device_data"].get(key)
+                name = device_data.get(key)
                 src = files.get(name.lower()) if name else None
-                if src and keep_dir:
+                if not src:
+                    continue
+                model["driver"]["files"][name.lower()] = catalog.sha256_file(src)
+                if key == "ExtCmdModule":
+                    model["interpreter"] = name.lower()
+                elif vid == "04b8":  # the only firmware upload protocol implemented is Epson's
+                    model["firmware"] = {"file": name.lower(), "protocol": "epson"}
+                if keep_dir:
                     os.makedirs(keep_dir, exist_ok=True)
                     shutil.copy(src, os.path.join(keep_dir, name.lower()))
-                    model[key.lower()] = os.path.join(keep_dir, name.lower())
             lines.append(f"\nInstall section `[{inst}]`:\n")
             lines.append(code("\n".join(f"{k} = {v}" if v else k for k, v in body)))
             for k, v in body:
@@ -305,9 +320,15 @@ def main():
     ap.add_argument("--driver", help="Windows driver package (.exe/.zip/.cab) for the scanner")
     ap.add_argument("--tool-version", default="?")
     ap.add_argument("--doctor", help="file with `silverfast-linux doctor` output to include")
-    ap.add_argument("--model-json", help="also write the scanner description from the driver as JSON")
+    ap.add_argument("--model-json", help="also write the draft catalog entry (models/README.md) to this file")
+    ap.add_argument("--driver-url", help="where the driver package was downloaded from (recorded in the draft)")
+    ap.add_argument("--list-candidates", action="store_true", help="only print VID:PID of likely scanners")
     ap.add_argument("--keep-files", help="copy the driver's interpreter/firmware into this directory")
     args = ap.parse_args()
+
+    if args.list_candidates:
+        print("\n".join(f"{d['vid']}:{d['pid']}" for d in usb_devices() if is_candidate(d)))
+        return 0
 
     out = [f"# silverfast-linux scanner report\n",
            f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} by silverfast-linux {args.tool_version}\n"]
@@ -364,11 +385,16 @@ def main():
     if args.driver:
         out.append("## Windows driver\n")
         if dev and os.path.exists(args.driver):
-            text, model = analyse_driver(args.driver, dev["vid"], dev["pid"], args.keep_files)
+            text, model = analyse_driver(args.driver, dev["vid"], dev["pid"], args.keep_files, args.driver_url)
             out.append(text)
+            draft = {k: v for k, v in model.items() if not k.startswith("_")}
+            if draft:
+                out.append("### Draft catalog entry\n")
+                out.append("A starting point for `models/" + draft["id"] + ".json` (see models/README.md):\n")
+                out.append("```json\n" + json.dumps(draft, indent=2) + "\n```\n")
             if args.model_json:
                 with open(args.model_json, "w") as f:
-                    json.dump(model, f, indent=2)
+                    json.dump(draft, f, indent=2)
         elif not dev:
             out.append("Skipped: no scanner selected.\n")
         else:

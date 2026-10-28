@@ -38,7 +38,7 @@ talks to the scanner over USB.
 | Scanner detection, firmware loading | ✅ automatic, on every power-on |
 | Prescan | ✅ |
 | Full scans | ✅ tested at 1600 dpi, 48-bit, 261 MB with zero USB errors |
-| Scanner | Epson Perfection V600 Photo (`04b8:013a`) |
+| Scanners | Epson Perfection V600 Photo (`04b8:013a`) — see the [scanner catalog](models/) |
 | SilverFast edition | Whatever your MySilverFast account unlocks (tested with SE) |
 | Tested on | Fedora 43, Wine 11 (Staging) with the scanner; CI covers Ubuntu 24.04, Wine 9 |
 
@@ -181,8 +181,10 @@ desktop application.
 
 | Command | What it does |
 |---|---|
-| `silverfast-linux install --accept-vendor-licenses` | Set up or repair the installation. Safe to re-run; downloads are cached. |
-| `silverfast-linux run` | Start the USB helper and SilverFast. |
+| `silverfast-linux install --accept-vendor-licenses [--scanner ID]` | Set up or repair the installation: every supported scanner plus any connected catalog scanner, or the ones you name. Safe to re-run; downloads are cached. |
+| `silverfast-linux run [--scanner ID]` | Start the USB helper for the connected scanner, and SilverFast. |
+| `silverfast-linux scanners` | List the scanner catalog and which scanners are connected. |
+| `silverfast-linux drivers [--device VID:PID]` | Show where to get a scanner's Windows driver, including Microsoft Update Catalog matches; `--download UPDATE_ID` fetches one. |
 | `silverfast-linux doctor` | Check Wine, the installation, the scanner and its permissions. |
 | `silverfast-linux udev` | Show how to grant USB access to the scanner. |
 | `silverfast-linux report --driver FILE\|URL` | Collect what is needed to support a new scanner (Markdown for an issue). |
@@ -264,13 +266,18 @@ the install. For the Epson driver, open an issue: its hashes are pinned in
 If SilverFast supports your scanner on Windows, you can help bring it to
 Linux without writing code:
 
-1. Download your scanner's Windows driver from the manufacturer.
+1. Check `silverfast-linux scanners` — it may already be in the catalog as
+   *experimental*. Otherwise find your scanner's Windows driver
+   (`silverfast-linux drivers` lists sources, including Microsoft's Update
+   Catalog) or download it from the manufacturer.
 2. Run `silverfast-linux try-scanner --driver <driver file or link>` — it
    tries your scanner in SilverFast and writes a report — or
    `silverfast-linux report --driver …` for the data alone.
 3. Open a [**New scanner** issue](https://github.com/sepgh/silverfast-linux/issues/new?template=new-scanner.yml)
    and attach the report.
 
+The report ends with a draft entry for the [scanner catalog](models/), so
+adding a scanner is usually a one-file pull request.
 [docs/adding-a-scanner.md](docs/adding-a-scanner.md) explains each step and
 exactly what the report contains.
 
@@ -279,8 +286,8 @@ exactly what the report contains.
 - **v1 (this release):** Epson Perfection V600, Linux helper + `sti.dll`.
 - **Pure Wine:** a `usbscan.sys` driver so no helper process is needed and
   the work can go upstream into Wine.
-- **More scanners:** model data files generated from Epson's drivers; other
-  Epson flatbeds first.
+- **More scanners:** the [catalog](models/) is data-driven and reports
+  produce its entries; next are confirmed entries for other Epson flatbeds.
 
 Details: [docs/plans/future-pure-wine-and-more-scanners.md](docs/plans/future-pure-wine-and-more-scanners.md).
 If you own another scanner and want to help test, please open an issue.
@@ -289,6 +296,7 @@ If you own another scanner and want to help test, please open an issue.
 
 - [How it works](docs/how-it-works.md) — architecture, reverse-engineering findings, design decisions
 - [Adding a scanner](docs/adding-a-scanner.md) — collecting data for a new scanner, and turning it into support
+- [Scanner catalog](models/README.md) — the model file format
 - [Development](docs/development.md) — building, tests, debugging, layout
 - [v1 design spec](docs/superpowers/specs/2026-10-27-silverfast-linux-v1-design.md)
 - [Future plan](docs/plans/future-pure-wine-and-more-scanners.md)

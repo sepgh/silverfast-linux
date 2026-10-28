@@ -19,6 +19,7 @@ SOCKET=$RUN_DIR/usbd.sock         # used by Wine Staging (AF_UNIX)
 PORT_FILE=$RUN_DIR/usbd.port      # loopback TCP fallback for mainline Wine
 TOKEN_FILE=$RUN_DIR/usbd.token    # session secret; RUN_DIR is mode 0700
 DESKTOP_FILE=$DATA_HOME/applications/silverfast-linux.desktop
+INSTALLED=$SFL_HOME/scanners.txt  # "<registry slot> <model id>" per installed scanner
 
 APP_DIR_WIN='C:\Program Files\SilverFast Application\SilverFast 9'
 APP_DIR=$WINEPREFIX/drive_c/Program\ Files/SilverFast\ Application/SilverFast\ 9
@@ -31,13 +32,13 @@ SCRIPT_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 if [ -f "$SCRIPT_DIR/../lib/silverfast-linux/sti.dll" ]; then
     LIB_DIR=$(cd "$SCRIPT_DIR/../lib/silverfast-linux" && pwd)
     STI_DLL=$LIB_DIR/sti.dll USBD=$LIB_DIR/silverfast-usbd
-    COMPONENTS=$LIB_DIR/components.txt UDEV_RULE=$LIB_DIR/70-silverfast-linux.rules
-    REPORT_PY=$LIB_DIR/sfl-report.py
+    COMPONENTS=$LIB_DIR/components.txt MODELS_DIR=$LIB_DIR/models
+    REPORT_PY=$LIB_DIR/sfl-report.py MODELS_PY=$LIB_DIR/sfl-models.py
 else
     ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
     STI_DLL=$ROOT/build/sti.dll USBD=$ROOT/build/silverfast-usbd
-    COMPONENTS=$ROOT/scripts/components.txt UDEV_RULE=$ROOT/udev/70-silverfast-linux.rules
-    REPORT_PY=$ROOT/scripts/sfl-report.py
+    COMPONENTS=$ROOT/scripts/components.txt MODELS_DIR=$ROOT/models
+    REPORT_PY=$ROOT/scripts/sfl-report.py MODELS_PY=$ROOT/scripts/sfl-models.py
 fi
 
 # --- vendor sources --------------------------------------------------------
@@ -45,14 +46,9 @@ fi
 # release index points at the current versioned repository; every archive
 # has a .sha1 next to it. Only the Windows build is used.
 SF_RELEASE_INDEX=https://cdn9.silverfast.com/release/sf9/win/Updates.xml
-# Epson Scan 3.9.3.3 for the Perfection V600, only two files are used from it.
-EPSON_URL=https://ftp.epson.com/drivers/EPSONScan_PerV600_3933_41_Signed.exe
-EPSON_SHA256=1ec32dcc16813c4070fb5c7ffb01506fe5a20197f2eb098c5deac5fab18a2b62
-EPSON_DLL_SHA256=76c49ca15c3cc824f35ee90261a17145504117e0b9a9460289eac364dc608323
-EPSON_FW_SHA256=3fde1787469c5cc3624743da6be2671ee297d07ba3fa8439d9d9408631cd8bc3
+# Scanner drivers come from the catalog in models/ (see models/README.md).
 
 SF_VERSION=
-SCANNER_VID=04b8 SCANNER_PID=013a SCANNER_NAME="EPSON Perfection V600"
 
 # --- output helpers --------------------------------------------------------
 if [ -t 1 ]; then B=$'\e[1m' G=$'\e[32m' Y=$'\e[33m' R=$'\e[31m' N=$'\e[0m'; else B='' G='' Y='' R='' N=''; fi
@@ -60,6 +56,9 @@ step() { printf '%s==>%s %s\n' "$B" "$N" "$*"; }
 ok()   { printf '  %s✓%s %s\n' "$G" "$N" "$*"; }
 warn() { printf '  %s!%s %s\n' "$Y" "$N" "$*" >&2; }
 die()  { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+
+models() { python3 "$MODELS_PY" --models "$MODELS_DIR" "$@"; }
+field() { models field "$1" "$2"; }
 
 quiet_wine() { WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=;winemenubuilder.exe=d;${WINEDLLOVERRIDES:-}" "$@"; }
 
@@ -70,12 +69,18 @@ silverfast-linux $VERSION - SilverFast 9 on Linux through Wine
 usage: silverfast-linux <command> [options]
 
 commands:
-  install --accept-vendor-licenses
-                 download SilverFast 9 and the Epson V600 driver from their
-                 vendors and set up a dedicated Wine prefix
-  run            start the USB helper and SilverFast
+  install --accept-vendor-licenses [--scanner ID ...]
+                 download SilverFast 9 and the scanner drivers from their
+                 vendors and set up a dedicated Wine prefix (default scanners:
+                 every supported one plus any connected catalog scanner)
+  run [--scanner ID] [-- SILVERFAST ARGS]
+                 start the USB helper for the connected scanner, and SilverFast
+  scanners       list the scanner catalog and which scanners are connected
+  drivers [--device VID:PID] [--download UPDATE_ID]
+                 show where to get a scanner's Windows driver: the catalog and
+                 Microsoft's Update Catalog; --download fetches an update
   doctor         check that everything needed for scanning is in place
-  udev           print the commands that grant USB access to the scanner
+  udev           print the commands that grant USB access to catalog scanners
   try-scanner --driver FILE|URL [--device VID:PID]
                  experimental: register an unsupported scanner from its Windows
                  driver, run SilverFast with full logging, and write a report
@@ -194,24 +199,54 @@ install_silverfast() {
     [ -f "$SYSTEM32/msvcp140.dll" ] && ok "runtime installed" || warn "VC++ runtime may be missing"
 }
 
-install_epson() {
-    step "Downloading the Epson V600 driver (for its interpreter and firmware)"
-    local exe tmp
-    exe=$CACHE_DIR/epson/$(basename "$EPSON_URL")
-    download "$EPSON_URL" "$exe" - "$EPSON_SHA256"
-    tmp=$(mktemp -d)
-    7z e -y -bso0 -bsp0 -o"$tmp" "$exe" '*/ModUsd.cab' || die "cannot unpack Epson driver"
-    7z e -y -bso0 -bsp0 -o"$tmp" "$tmp/ModUsd.cab" EsxuinA1.dll EsfwA1.bin || die "cannot unpack ModUsd.cab"
-    verify "$tmp/EsxuinA1.dll" - "$EPSON_DLL_SHA256" && verify "$tmp/EsfwA1.bin" - "$EPSON_FW_SHA256" \
-        || { rm -rf "$tmp"; die "unexpected Epson file contents"; }
-    install -Dm644 "$tmp/EsxuinA1.dll" "$SYSTEM32/esxuina1.dll"
-    install -Dm644 "$tmp/EsfwA1.bin" "$FIRMWARE_DIR/esfwa1.bin"
-    rm -rf "$tmp"
-    ok "interpreter esxuina1.dll and firmware esfwa1.bin installed"
+# Prints "<slot> <id>" for each installed scanner.
+installed_scanners() { [ -f "$INSTALLED" ] && cat "$INSTALLED"; return 0; }
+
+# install_scanner ID SLOT: driver files from the vendor, registry entry.
+install_scanner() {
+    local id=$1 slot=$2 url pkg tmp reg interp fw
+    url=$(field "$id" driver.url)
+    interp=$(field "$id" interpreter)
+    fw=$(field "$id" firmware.file)
+    if [ -n "$url" ]; then
+        pkg=$CACHE_DIR/drivers/$(basename "${url%%\?*}")
+        download "$url" "$pkg" - "$(field "$id" driver.sha256)"
+        tmp=$(mktemp -d)
+        models extract "$id" "$pkg" "$tmp" >/dev/null || { rm -rf "$tmp"; die "cannot take the needed files from $(basename "$pkg")"; }
+        [ -z "$interp" ] || install -Dm644 "$tmp/$interp" "$SYSTEM32/$interp"
+        [ -z "$fw" ] || install -Dm644 "$tmp/$fw" "$FIRMWARE_DIR/$fw"
+        rm -rf "$tmp"
+    fi
+    reg=$(mktemp --suffix=.reg)
+    models registry "$id" "$slot" > "$reg"
+    quiet_wine wine regedit /S "$(quiet_wine winepath -w "$reg")" || die "registry import failed"
+    rm -f "$reg"
+    ok "$(field "$id" name)${interp:+, interpreter $interp}${fw:+, firmware $fw}"
+}
+
+install_scanners() {
+    local ids=("$@") reg i=0 slot
+    step "Installing scanner support"
+    [ ${#ids[@]} -gt 0 ] || { warn "no scanners selected"; return; }
+    # Drop earlier registrations so removed scanners disappear from SilverFast.
+    reg=$(mktemp --suffix=.reg)
+    { echo REGEDIT4; echo; for slot in $(seq -f %04g 0 31); do
+        echo "[-HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\$slot]"
+      done; } > "$reg"
+    quiet_wine wine regedit /S "$(quiet_wine winepath -w "$reg")" || true
+    rm -f "$reg"
+    : > "$INSTALLED"
+    for id in "${ids[@]}"; do
+        slot=$(printf %04d "$i")
+        install_scanner "$id" "$slot"
+        echo "$slot $id" >> "$INSTALLED"
+        i=$((i + 1))
+    done
+    quiet_wine wineserver -w
 }
 
 install_bridge() {
-    step "Installing the sti.dll replacement and device registration"
+    step "Installing the sti.dll replacement"
     install -Dm644 "$STI_DLL" "$SYSTEM32/sti.dll"
     local reg; reg=$(mktemp --suffix=.reg)
     cat > "$reg" <<EOF
@@ -224,35 +259,11 @@ REGEDIT4
 "x64_path"="${APP_DIR_WIN//\\/\\\\}"
 "x64_Version"="${SF_VERSION:-9}"
 "x64_Stamp"="$(date +%s)000"
-
-[HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000]
-"DriverDesc"="$SCANNER_NAME"
-"FriendlyName"="$SCANNER_NAME"
-"Vendor"="EPSON"
-"ProviderName"="EPSON"
-"SubClass"="StillImage"
-"DeviceID"="{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\\\0000"
-"MatchingDeviceId"="usb\\\\vid_${SCANNER_VID}&pid_${SCANNER_PID}"
-"InfPath"="esa1.inf"
-"InfSection"="ES00A1_NTx64_60"
-"DeviceType"=dword:00000001
-"DeviceSubType"=dword:00000001
-"Capabilities"=dword:00000013
-"HardwareConfig"=dword:00000004
-"CreateFileName"="\\\\\\\\.\\\\Usbscan0"
-
-[HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\0000\\DeviceData]
-"Model"="$SCANNER_NAME"
-"ModelCode"="ES00A1"
-"HOptRes"="6400,1"
-"VOptRes"="9600,1"
-"ExtCmdModule"="esxuina1.dll"
-"ExtBinModule"="esfwa1.bin"
 EOF
     quiet_wine wine regedit /S "$(quiet_wine winepath -w "$reg")" || die "registry import failed"
     quiet_wine wineserver -w
     rm -f "$reg"
-    ok "scanner registered as $SCANNER_NAME"
+    ok "sti.dll installed"
 }
 
 install_desktop_entry() {
@@ -272,14 +283,20 @@ EOF
 }
 
 cmd_install() {
-    local accepted=0
-    for a in "$@"; do [ "$a" = --accept-vendor-licenses ] && accepted=1; done
+    local accepted=0 scanners=() ids
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --accept-vendor-licenses) accepted=1; shift ;;
+            --scanner) scanners+=("${2:?}"); shift 2 ;;
+            *) die "unknown install option: $1" ;;
+        esac
+    done
     if [ $accepted = 0 ]; then
         cat <<EOF
 silverfast-linux downloads proprietary software directly from its vendors:
-  - SilverFast 9 by LaserSoft Imaging AG     https://www.silverfast.com
-  - Epson Scan driver for the Perfection V600 https://epson.com/Support
-Using them means accepting their licence terms. Nothing from either vendor is
+  - SilverFast 9 by LaserSoft Imaging AG          https://www.silverfast.com
+  - your scanner's Windows driver from its maker  (see 'silverfast-linux scanners')
+Using them means accepting their licence terms. Nothing from any vendor is
 redistributed by this project. SilverFast itself still needs your own
 MySilverFast licence to scan.
 
@@ -288,24 +305,27 @@ EOF
         exit 1
     fi
     check_tools
+    mapfile -t ids < <(models select "${scanners[@]}") || die "unknown scanner"
     mkdir -p "$SFL_HOME" "$CACHE_DIR" "$LOG_DIR"
     create_prefix
     install_silverfast
-    install_epson
     install_bridge
+    install_scanners "${ids[@]}"
     install_desktop_entry
     step "Done"
-    usb_access_ok || { warn "the scanner is not accessible yet; run 'silverfast-linux udev' for the fix"; }
+    for id in "${ids[@]}"; do
+        usb_access_ok "$(field "$id" usb)" || warn "$(field "$id" name) is not accessible yet; run 'silverfast-linux udev' for the fix"
+    done
     echo "Start SilverFast with: silverfast-linux run"
 }
 
 # --- run -------------------------------------------------------------------
-# Prints the /dev/bus/usb node of the scanner, if connected.
+# scanner_node VID:PID: prints the /dev/bus/usb node of the device, if connected.
 scanner_node() {
     local d
     for d in /sys/bus/usb/devices/*; do
         [ -f "$d/idVendor" ] || continue
-        [ "$(cat "$d/idVendor")" = "$SCANNER_VID" ] && [ "$(cat "$d/idProduct")" = "$SCANNER_PID" ] || continue
+        [ "$(cat "$d/idVendor"):$(cat "$d/idProduct")" = "$1" ] || continue
         printf '/dev/bus/usb/%03d/%03d\n' "$(cat "$d/busnum")" "$(cat "$d/devnum")"
         return 0
     done
@@ -313,7 +333,7 @@ scanner_node() {
 }
 
 usb_access_ok() {
-    local node; node=$(scanner_node) || return 0  # not connected: nothing to check
+    local node; node=$(scanner_node "$1") || return 0  # not connected: nothing to check
     [ -r "$node" ] && [ -w "$node" ]
 }
 
@@ -361,45 +381,74 @@ launch_silverfast() {
     wineserver -w
 }
 
+# helper_args_for ID: silverfast-usbd options for an installed catalog scanner.
+helper_args_for() {
+    local fw; fw=$(field "$1" firmware.file)
+    printf '%s\n' --device "$(field "$1" usb)" --name "$(field "$1" name)"
+    [ -z "$fw" ] || printf '%s\n' --firmware "$fw" --firmware-dir "$FIRMWARE_DIR"
+}
+
 cmd_run() {
+    local wanted='' id='' slot sid usb args=()
+    if [ "${1:-}" = --scanner ]; then wanted=${2:?}; shift 2; fi
+    [ "${1:-}" = -- ] && shift
     [ -f "$APP_DIR/SilverFast 9.exe" ] || die "SilverFast is not installed; run 'silverfast-linux install' first"
-    if ! scanner_node >/dev/null; then warn "$SCANNER_NAME is not connected; SilverFast will start without it"
-    elif ! usb_access_ok; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
-    start_helper "$LOG_DIR" --firmware-dir "$FIRMWARE_DIR"
+    [ -s "$INSTALLED" ] || die "no scanner installed; run 'silverfast-linux install' again"
+    # Use the requested scanner, else the first installed one that is connected.
+    while read -r slot sid; do
+        if [ -n "$wanted" ]; then
+            [ "$sid" = "$wanted" ] || [ "$(field "$sid" usb)" = "$wanted" ] && { id=$sid; break; }
+        elif scanner_node "$(field "$sid" usb)" >/dev/null; then id=$sid; break
+        fi
+        [ -n "$id" ] || id=$sid
+    done < "$INSTALLED"
+    [ -n "$id" ] || die "scanner '$wanted' is not installed"
+    usb=$(field "$id" usb)
+    if ! scanner_node "$usb" >/dev/null; then warn "$(field "$id" name) is not connected; SilverFast will start without it"
+    elif ! usb_access_ok "$usb"; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
+    mapfile -t args < <(helper_args_for "$id")
+    start_helper "$LOG_DIR" "${args[@]}"
     launch_silverfast "$LOG_DIR" "$@"
+}
+
+cmd_scanners() {
+    models list
+    echo
+    echo "Installed: $(installed_scanners | awk '{print $2}' | paste -sd' ' -)"
+    echo "Not listed? See https://github.com/sepgh/silverfast-linux/blob/main/docs/adding-a-scanner.md"
+}
+
+cmd_drivers() {
+    local device='' download_id='' url file
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --device) device=${2:?}; shift 2 ;;
+            --download) download_id=${2:?}; shift 2 ;;
+            *) die "unknown drivers option: $1" ;;
+        esac
+    done
+    if [ -n "$download_id" ]; then
+        step "Downloading Microsoft Update Catalog entry $download_id"
+        while read -r url; do
+            file=$CACHE_DIR/drivers/$(basename "${url%%\?*}")
+            download "$url" "$file"
+            ok "$file"
+            echo "  Try it: silverfast-linux try-scanner --driver '$file'"
+        done < <(models ms-download "$download_id")
+        return
+    fi
+    if [ -z "$device" ]; then
+        device=$(models list --json | python3 -c 'import json,sys; print("\n".join(m["usb"] for m in json.load(sys.stdin) if m["connected"]))')
+        [ -n "$device" ] || device=$(python3 "$REPORT_PY" --list-candidates)
+        [ -n "$device" ] || die "no scanner-like USB device found; connect it or pass --device VID:PID"
+    fi
+    for usb in $device; do models drivers "$usb"; echo; done
+    echo "Fetch a Microsoft Update Catalog entry with: silverfast-linux drivers --download UPDATE_ID"
 }
 
 # --- try-scanner -------------------------------------------------------------
 # Registry slot for the scanner being tried; the supported V600 uses 0000.
 TRY_SLOT=0100
-
-# Writes a .reg file registering the scanner described by model.json.
-try_registry() {
-    python3 - "$1" "$TRY_SLOT" <<'PY'
-import json, sys
-m = json.load(open(sys.argv[1]))
-slot = sys.argv[2]
-key = r"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}" + "\\" + slot
-esc = lambda v: str(v).replace("\\", "\\\\").replace('"', '\\"')
-print("REGEDIT4\n")
-print(f"[-{key}]\n")
-print(f"[{key}]")
-for k, v in {"DriverDesc": m["name"], "FriendlyName": m["name"], "Vendor": m.get("vendor", ""),
-             "ProviderName": m.get("vendor", ""), "SubClass": "StillImage",
-             "DeviceID": "{6BDD1FC6-810F-11D0-BEC7-08002BE2092F}\\" + slot,
-             "MatchingDeviceId": f"usb\\vid_{m['vid']}&pid_{m['pid']}",
-             "InfPath": m.get("inf", ""), "InfSection": m.get("install_section", ""),
-             "CreateFileName": "\\\\.\\Usbscan" + str(int(slot))}.items():
-    print(f'"{k}"="{esc(v)}"')
-for k in ("device_type", "device_subtype", "capabilities"):
-    name = {"device_type": "DeviceType", "device_subtype": "DeviceSubType", "capabilities": "Capabilities"}[k]
-    print(f'"{name}"=dword:{m.get(k, 0):08x}')
-print('"HardwareConfig"=dword:00000004\n')
-print(f"[{key}\\DeviceData]")
-for k, v in m.get("device_data", {}).items():
-    print(f'"{esc(k)}"="{esc(v)}"')
-PY
-}
 
 try_cleanup() {
     local reg; reg=$(mktemp --suffix=.reg)
@@ -409,7 +458,7 @@ try_cleanup() {
 }
 
 cmd_try_scanner() {
-    local device='' driver='' report dir model vid pid helper_args interp fw
+    local device='' driver='' url='' report dir model usb interp fw args=()
     while [ $# -gt 0 ]; do
         case $1 in
             --device) device=${2:?}; shift 2 ;;
@@ -423,9 +472,9 @@ cmd_try_scanner() {
     need python3; need 7z
     if [[ $driver == http://* || $driver == https://* ]]; then
         step "Downloading the driver package"
-        local file; file=$CACHE_DIR/report/$(basename "${driver%%\?*}")
-        download "$driver" "$file"
-        driver=$file
+        url=$driver
+        driver=$CACHE_DIR/drivers/$(basename "${driver%%\?*}")
+        download "$url" "$driver"
     fi
 
     report=$PWD/silverfast-linux-try-$(date +%Y%m%d-%H%M%S).md
@@ -434,29 +483,27 @@ cmd_try_scanner() {
     mkdir -p "$dir/logs"
     step "Reading the scanner and its Windows driver"
     python3 "$REPORT_PY" --tool-version "$VERSION" ${device:+--device "$device"} --driver "$driver" \
-        --model-json "$model" --keep-files "$dir/files" >"$report"
-    [ -s "$model" ] && python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("vid") else 1)' "$model" \
-        || die "the driver package does not describe this scanner; see $report"
-    vid=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["vid"])' "$model")
-    pid=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["pid"])' "$model")
-    interp=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("extcmdmodule", ""))' "$model")
-    fw=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("extbinmodule", ""))' "$model")
-    ok "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' "$model") ($vid:$pid)"
+        ${url:+--driver-url "$url"} --model-json "$model" --keep-files "$dir/files" >"$report"
+    [ -n "$(field "$model" usb 2>/dev/null)" ] || die "the driver package does not describe this scanner; see $report"
+    usb=$(field "$model" usb)
+    interp=$(field "$model" interpreter)
+    fw=$(field "$model" firmware.file)
+    ok "$(field "$model" name) ($usb)"
 
     step "Registering it in the Wine prefix (temporarily)"
     local reg; reg=$(mktemp --suffix=.reg)
-    try_registry "$model" > "$reg"
+    models registry "$model" "$TRY_SLOT" > "$reg"
     quiet_wine wine regedit /S "$(quiet_wine winepath -w "$reg")" || die "registry import failed"
     rm -f "$reg"
-    [ -z "$interp" ] || install -Dm644 "$interp" "$SYSTEM32/$(basename "$interp")"
+    [ -z "$interp" ] || install -Dm644 "$dir/files/$interp" "$SYSTEM32/$interp"
     trap 'try_cleanup' RETURN
 
-    helper_args=(--firmware-dir "$dir/files" --device "$vid:$pid")
-    # The firmware upload sequence is Epson's; only use it for Epson scanners.
-    if [ -n "$fw" ] && [ "$vid" = 04b8 ]; then helper_args+=(--firmware "$(basename "$fw")"); fi
+    args=(--device "$usb" --name "$(field "$model" name)")
+    # firmware is only set in the draft for Epson scanners (the implemented protocol)
+    [ -z "$fw" ] || args+=(--firmware "$fw" --firmware-dir "$dir/files")
     step "Starting SilverFast with full USB logging"
     echo "  Select the scanner, press START, try a prescan, then close SilverFast."
-    SFL_VERBOSE=1 start_helper "$dir/logs" "${helper_args[@]}"
+    SFL_VERBOSE=1 start_helper "$dir/logs" "${args[@]}"
     launch_silverfast "$dir/logs"
 
     step "Adding the session logs to the report"
@@ -500,19 +547,34 @@ cmd_doctor() {
     check "SilverFast installed" '[ -f "$APP_DIR/SilverFast 9.exe" ]' "run silverfast-linux install"
     check "SilverFast data folders" '[ -d "$PROGRAMDATA_DIR/Prefs" ] && [ -d "$PROGRAMDATA_DIR/NegaFix" ]' "re-run install"
     check "sti.dll installed in prefix" 'cmp -s "$STI_DLL" "$SYSTEM32/sti.dll"' "re-run install"
-    check "Epson interpreter" '[ -f "$SYSTEM32/esxuina1.dll" ]' "re-run install"
-    check "V600 firmware" '[ -f "$FIRMWARE_DIR/esfwa1.bin" ]' "re-run install"
-    check "scanner connected" 'scanner_node >/dev/null' "plug in and switch on the V600"
-    check "scanner accessible" 'usb_access_ok' "run 'silverfast-linux udev'"
+    check "scanner catalog ($(models list --json 2>/dev/null | grep -c '"id"') models)" 'models validate >/dev/null' "run: $MODELS_PY validate"
+    check "scanners installed" '[ -s "$INSTALLED" ]' "re-run install"
+    local slot id name usb interp fw any_connected=0
+    while read -r slot id; do
+        name=$(field "$id" name) usb=$(field "$id" usb) interp=$(field "$id" interpreter) fw=$(field "$id" firmware.file)
+        [ -z "$interp" ] || check "$name: interpreter $interp" '[ -f "$SYSTEM32/$interp" ]' "re-run install"
+        [ -z "$fw" ] || check "$name: firmware $fw" '[ -f "$FIRMWARE_DIR/$fw" ]' "re-run install"
+        if scanner_node "$usb" >/dev/null; then
+            # shellcheck disable=SC2034  # read by the eval in check() below
+            any_connected=1
+            ok "$name: connected"
+            check "$name: accessible" 'usb_access_ok "$usb"' "run 'silverfast-linux udev'"
+        fi
+    done < <(installed_scanners)
+    check "an installed scanner is connected" '[ $any_connected = 1 ]' "plug in and switch on your scanner"
     check "helper socket directory" '[ -n "${XDG_RUNTIME_DIR:-}" ]' "XDG_RUNTIME_DIR unset; using /tmp"
     [ $fails = 0 ] && step "All good" || { step "$fails problem(s) found"; return 1; }
 }
 
 cmd_udev() {
+    local rules=$SFL_HOME/70-silverfast-linux.rules
+    mkdir -p "$SFL_HOME"
+    models udev > "$rules"
     cat <<EOF
-Run these commands once to let your user open the scanner over USB:
+Run these commands once to let your user open the catalog's scanners over USB
+(rules: $rules):
 
-  sudo install -m644 "$UDEV_RULE" /etc/udev/rules.d/
+  sudo install -m644 "$rules" /etc/udev/rules.d/70-silverfast-linux.rules
   sudo udevadm control --reload && sudo udevadm trigger
 
 Then unplug and replug the scanner (or switch it off and on).
@@ -534,7 +596,7 @@ cmd_report() {
     [ -z "$driver" ] || need 7z "needed to unpack the driver package"
     if [[ $driver == http://* || $driver == https://* ]]; then
         step "Downloading the driver package"
-        file=$CACHE_DIR/report/$(basename "${driver%%\?*}")
+        file=$CACHE_DIR/drivers/$(basename "${driver%%\?*}")
         download "$driver" "$file"
         driver=$file
     fi
@@ -563,6 +625,8 @@ case ${1:-} in
     run)       shift; cmd_run "$@" ;;
     doctor)    cmd_doctor ;;
     udev)      cmd_udev ;;
+    scanners)  cmd_scanners ;;
+    drivers)   shift; cmd_drivers "$@" ;;
     report)    shift; cmd_report "$@" ;;
     try-scanner) shift; cmd_try_scanner "$@" ;;
     uninstall) shift; cmd_uninstall "$@" ;;

@@ -1,7 +1,0 @@
-# Lets the logged-in desktop user open supported scanners with libusb, which
-# silverfast-usbd needs. Install with:
-#   sudo install -m644 70-silverfast-linux.rules /etc/udev/rules.d/
-#   sudo udevadm control --reload && sudo udevadm trigger
-
-# Epson Perfection V600 Photo (GT-X820)
-SUBSYSTEM=="usb", ATTR{idVendor}=="04b8", ATTR{idProduct}=="013a", TAG+="uaccess"
