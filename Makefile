@@ -15,6 +15,13 @@ BUILD      ?= build
 CC         ?= gcc
 MINGW_CC   ?= x86_64-w64-mingw32-gcc
 CFLAGS     ?= -O2 -g
+# sti.dll gets its own flags: native hardening flags from the environment
+# (e.g. -fstack-protector in Flatpak or distro builds) would make it import
+# libssp-0.dll, which does not exist on Windows, and SilverFast fails to start.
+MINGW_CFLAGS ?= -O2 -g -fno-stack-protector -U_FORTIFY_SOURCE
+# The only DLLs sti.dll may import: all ship with Windows 10+ and Wine
+# (msvcrt or, with UCRT-based MinGW toolchains, ucrtbase/api-ms-win-crt-*).
+STI_ALLOWED_IMPORTS := ^(advapi32|kernel32|msvcrt|user32|ws2_32|ole32|ucrtbase|api-ms-win-crt-[a-z0-9-]+)\.dll$$
 WARN       := -Wall -Wextra -Wno-unused-parameter
 CONTAINER  ?= $(shell command -v podman 2>/dev/null || command -v docker 2>/dev/null)
 
@@ -42,10 +49,12 @@ $(BUILD)/silverfast-usbd: $(HELPER_SRC) helper/src/*.h | $(BUILD)
 
 $(BUILD)/sti.dll: $(STI_SRC) sti/src/*.h sti/src/sti.def helper/src/protocol.h | $(BUILD)
 	@command -v $(MINGW_CC) >/dev/null || { echo "error: $(MINGW_CC) (MinGW-w64) not found; $(MISSING_HINT)"; exit 1; }
-	$(MINGW_CC) $(CFLAGS) $(WARN) -D_WIN32_WINNT=0x0601 -shared -static-libgcc -o $@ $(STI_SRC) sti/src/sti.def -lole32 -luuid -lws2_32
+	$(MINGW_CC) $(MINGW_CFLAGS) $(WARN) -D_WIN32_WINNT=0x0601 -shared -static-libgcc -o $@ $(STI_SRC) sti/src/sti.def -lole32 -luuid -lws2_32
+	@bad=$$($(MINGW_CC:gcc=objdump) -p $@ | sed -n 's/.*DLL Name: //p' | grep -viE '$(STI_ALLOWED_IMPORTS)'); \
+	 if [ -n "$$bad" ]; then echo "error: sti.dll imports DLLs Windows does not provide: $$bad"; rm -f $@; exit 1; fi
 
 $(BUILD)/sti_selftest.exe: sti/tests/sti_selftest.c | $(BUILD)
-	$(MINGW_CC) $(CFLAGS) $(WARN) -D_WIN32_WINNT=0x0601 -static-libgcc -o $@ $< -ladvapi32
+	$(MINGW_CC) $(MINGW_CFLAGS) $(WARN) -D_WIN32_WINNT=0x0601 -static-libgcc -o $@ $< -ladvapi32
 
 $(BUILD)/test_%: helper/tests/test_%.c helper/src/%.c helper/src/%.h | $(BUILD)
 	$(CC) $(CFLAGS) $(WARN) -o $@ $< helper/src/$*.c

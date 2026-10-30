@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Experimental catalog entries for more Epson scanners that SilverFast 9
+  supports on Windows 10/11, generated from Epson's Windows drivers (not yet
+  confirmed with hardware; installed only when connected).
+- `sfl-report.py --driver-ids` and `--draft-only`: list the USB IDs a driver
+  package covers and build a catalog entry without the scanner attached.
+- Packaging: AUR packages (`silverfast-linux`, `silverfast-linux-bin`) and a
+  Flatpak (`io.github.sepgh.silverfast_linux`) built on Flathub's Wine, with
+  a first-start setup dialog.
+
+### Changed
+- `install` does not write a desktop entry inside a Flatpak.
+- `run` refreshes the prefix's `sti.dll` when the installed one changed, so
+  upgrades no longer need a re-install for that.
+
+### Fixed
+- `sti.dll` no longer picks up native hardening flags from the build
+  environment (Flatpak/distro `CFLAGS`), which made it import `libssp-0.dll`
+  and stopped SilverFast from starting. The build now fails if `sti.dll`
+  imports anything Windows does not provide.
+
 ## 0.2.0 — 2026-10-28
 
 ### Added

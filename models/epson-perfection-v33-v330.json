@@ -1,0 +1,33 @@
+{
+  "id": "epson-perfection-v33-v330",
+  "name": "EPSON Perfection V33/V330",
+  "vendor": "EPSON",
+  "usb": "04b8:0142",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/epson18558.exe",
+    "sha256": "ef0c1a723bebe48edf7a221d93ae686284f8fba6beb13681ce81ac44f9836baf",
+    "info": "epson18558.exe, 12/10/2015,3.9.2.3",
+    "files": {
+      "esxuinad.dll": "e710060d538c5970f57327e64913c7b881b6231fc3085a1c12e0804f436b5fb0"
+    }
+  },
+  "registry": {
+    "inf": "esadn.inf",
+    "install_section": "USB.ESADNT6.x64",
+    "device_type": 1,
+    "device_subtype": 17,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Perfection V33/V330",
+      "Model": "EPSON Perfection V33/V330",
+      "ExtCmdModule": "esxuinad.dll",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "9600,1",
+      "ModelCode": "ES00AD"
+    }
+  },
+  "interpreter": "esxuinad.dll"
+}

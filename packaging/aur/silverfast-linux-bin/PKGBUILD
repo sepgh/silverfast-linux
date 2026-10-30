@@ -1,0 +1,24 @@
+# Maintainer: sepgh <13250403+sepgh@users.noreply.github.com>
+pkgname=silverfast-linux-bin
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Run SilverFast 9 (Windows) with USB scanners on Linux through Wine (unofficial, prebuilt)"
+arch=('x86_64')
+url="https://github.com/sepgh/silverfast-linux"
+license=('MIT')
+depends=('wine' 'libusb' 'python' 'curl' '7zip')
+optdepends=('sane: lets "silverfast-linux report" include what SANE sees')
+provides=('silverfast-linux')
+conflicts=('silverfast-linux')
+options=('!debug')
+source=("$url/releases/download/v$pkgver/silverfast-linux-$pkgver-x86_64.tar.gz")
+sha256sums=('dfd4a3d8128a554cbe91c26d79100cb2edb7f6df33c6a0ebb14ae12cae6bf44a')
+
+package() {
+  cd "silverfast-linux-$pkgver-x86_64"
+  install -Dm755 bin/silverfast-linux "$pkgdir/usr/bin/silverfast-linux"
+  install -d "$pkgdir/usr/lib"
+  cp -r lib/silverfast-linux "$pkgdir/usr/lib/"
+  install -Dm644 share/doc/silverfast-linux/LICENSE -t "$pkgdir/usr/share/licenses/silverfast-linux"
+  install -Dm644 share/doc/silverfast-linux/README.md -t "$pkgdir/usr/share/doc/silverfast-linux"
+}

@@ -1,0 +1,40 @@
+{
+  "id": "epson-perfection-v550",
+  "name": "EPSON Perfection V550",
+  "vendor": "EPSON",
+  "usb": "04b8:013b",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/V550_EScan_3924_AM.exe",
+    "sha256": "63c54d7cc16ea62b159b35c807332c99d93914ce4d6ee6ea394812ffd42cb28d",
+    "info": "V550_EScan_3924_AM.exe, 09/12/2025,1.1.0.0",
+    "files": {
+      "esxuineb.dll": "0265cf7790d8d0f9c38fead6071b550c65da0c328f0f5c288295adc7314314ca",
+      "esfweb.bin": "112667671c0c00c1b474901c0c945a5d50c26e817cf356698f8ccb361c32ee31"
+    }
+  },
+  "registry": {
+    "inf": "eseb.inf",
+    "install_section": "ES00EB_NTx64_60",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 19,
+    "device_data": {
+      "Model": "EPSON Perfection V550",
+      "TwainDS": "EPSON Perfection V550",
+      "NumButtons": "4,1",
+      "HOptRes": "6400,1",
+      "VOptRes": "9600,1",
+      "ModelCode": "ES00EB",
+      "OptionCaps": "0x900,1",
+      "ExtCmdModule": "esxuineb.dll",
+      "ExtBinModule": "esfweb.bin"
+    }
+  },
+  "interpreter": "esxuineb.dll",
+  "firmware": {
+    "file": "esfweb.bin",
+    "protocol": "epson"
+  }
+}

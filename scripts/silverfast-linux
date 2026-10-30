@@ -119,7 +119,7 @@ download() {
     mkdir -p "$(dirname "$dest")"
     local progress=-sS
     [ -t 1 ] && progress=--progress-bar
-    curl -fL --retry 3 "$progress" -o "$dest.part" "$url" || die "download failed: $url"
+    curl -fL --retry 4 --retry-all-errors --connect-timeout 20 "$progress" -o "$dest.part" "$url" || die "download failed: $url"
     mv "$dest.part" "$dest"
     verify "$dest" "$sha1" "$sha256" || { rm -f "$dest"; die "checksum mismatch for $url"; }
 }
@@ -144,14 +144,14 @@ create_prefix() {
 # Prints "<component> <version> <archive> <sha1-url-base>" for every wanted archive.
 resolve_silverfast() {
     local index repo
-    index=$(curl -fsSL "$SF_RELEASE_INDEX") || die "cannot reach LaserSoft's download server"
+    index=$(curl -fsSL --retry 4 --retry-all-errors --connect-timeout 20 --max-time 120 "$SF_RELEASE_INDEX") || die "cannot reach LaserSoft's download server"
     repo=$(printf '%s' "$index" | python3 -c '
 import sys, xml.etree.ElementTree as E
 for r in E.fromstring(sys.stdin.read()).iter("Repository"):
     print(r.get("url")); break')
     [ -n "$repo" ] || die "unexpected SilverFast release index format"
     repo=${repo/https:\/\/cdn.silverfast.com\/9\//https://cdn9.silverfast.com/}
-    curl -fsSL "$repo/Updates.xml" | python3 -c '
+    curl -fsSL --retry 4 --retry-all-errors --connect-timeout 20 --max-time 120 "$repo/Updates.xml" | python3 -c '
 import sys, xml.etree.ElementTree as E
 wanted = {}
 for line in open(sys.argv[1]):
@@ -184,7 +184,7 @@ install_silverfast() {
     ok "release ${SF_VERSION:-unknown}"
     while read -r name dest url; do
         file=$CACHE_DIR/silverfast/$name/$(basename "$url")
-        sha1=$(curl -fsSL "$url.sha1" | cut -c1-40) || die "missing checksum for $url"
+        sha1=$(curl -fsSL --retry 4 --retry-all-errors --connect-timeout 20 --max-time 120 "$url.sha1" | cut -c1-40) || die "missing checksum for $url"
         download "$url" "$file" "$sha1"
         mkdir -p "$(dest_dir "$dest")"
         7z x -y -bso0 -bsp0 -o"$(dest_dir "$dest")" "$file" || die "cannot extract $file"
@@ -267,6 +267,8 @@ EOF
 }
 
 install_desktop_entry() {
+    # A Flatpak ships its own desktop entry.
+    [ -z "${FLATPAK_ID:-}" ] || return 0
     step "Adding a desktop entry"
     mkdir -p "$(dirname "$DESKTOP_FILE")"
     cat > "$DESKTOP_FILE" <<EOF
@@ -406,6 +408,8 @@ cmd_run() {
     usb=$(field "$id" usb)
     if ! scanner_node "$usb" >/dev/null; then warn "$(field "$id" name) is not connected; SilverFast will start without it"
     elif ! usb_access_ok "$usb"; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
+    # Keep the prefix's sti.dll in step with this installation (upgrades).
+    cmp -s "$STI_DLL" "$SYSTEM32/sti.dll" || install -m644 "$STI_DLL" "$SYSTEM32/sti.dll"
     mapfile -t args < <(helper_args_for "$id")
     start_helper "$LOG_DIR" "${args[@]}"
     launch_silverfast "$LOG_DIR" "$@"

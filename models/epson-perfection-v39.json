@@ -1,0 +1,40 @@
+{
+  "id": "epson-perfection-v39",
+  "name": "EPSON Perfection V39",
+  "vendor": "EPSON",
+  "usb": "04b8:013d",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/V39_EScan_3950_AM.exe",
+    "sha256": "c588daf714f9372ef7902cfd4faaf23a7a6aaca89747a7a698ba54e5748374d2",
+    "info": "V39_EScan_3950_AM.exe, 01/21/2025,2.1.0.0",
+    "files": {
+      "esxi010c.dll": "c0f72255ebe07b17f4a3ed152c7f5faa7492115e6640d8e3a66e3ede92dcb331",
+      "esfw010c.bin": "14986e0823fb805f97099605e381686aded9a86f58228c508675b5e42b4a6211"
+    }
+  },
+  "registry": {
+    "inf": "es010d.inf",
+    "install_section": "ES010D_NTx64_60",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 19,
+    "device_data": {
+      "Model": "EPSON Perfection V39",
+      "TwainDS": "EPSON Perfection V39",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "4800,1",
+      "ModelCode": "ES010D",
+      "OptionCaps": "0x100,1",
+      "ExtCmdModule": "esxi010c.dll",
+      "ExtBinModule": "esfw010c.bin"
+    }
+  },
+  "interpreter": "esxi010c.dll",
+  "firmware": {
+    "file": "esfw010c.bin",
+    "protocol": "epson"
+  }
+}

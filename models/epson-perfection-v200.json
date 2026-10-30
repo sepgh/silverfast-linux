@@ -1,0 +1,33 @@
+{
+  "id": "epson-perfection-v200",
+  "name": "EPSON Perfection V200",
+  "vendor": "EPSON",
+  "usb": "04b8:012e",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/epson13568.exe",
+    "sha256": "cb2c35225b11384b1b572b8604fb1502954bd883bc92fccc1ae4dd86bb21ab9d",
+    "info": "epson13568.exe, 11/10/2009,3.2.4.2",
+    "files": {
+      "esxuin7a.dll": "677db872facd4fc93a6167c97b58706ffeaecd7d429ac93be9afaa93c8975b76"
+    }
+  },
+  "registry": {
+    "inf": "es7an.inf",
+    "install_section": "USB.ES7AXP.x64",
+    "device_type": 1,
+    "device_subtype": 17,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Perfection V200",
+      "Model": "EPSON Perfection V200",
+      "ExtCmdModule": "esxuin7a.dll",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "4800,1",
+      "ModelCode": "ES007A"
+    }
+  },
+  "interpreter": "esxuin7a.dll"
+}

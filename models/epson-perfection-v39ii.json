@@ -1,0 +1,40 @@
+{
+  "id": "epson-perfection-v39ii",
+  "name": "EPSON Perfection V39II",
+  "vendor": "EPSON",
+  "usb": "04b8:013f",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/V39II_EScan2_67820_AM.exe",
+    "sha256": "b8e497aab87acbb1c7b1889b53375f22aa12e3050da5a5117c0809ff651d6065",
+    "info": "V39II_EScan2_67820_AM.exe, 10/29/2024,1.1.1.0",
+    "files": {
+      "esxi0282.dll": "b5b6034569776496d13191b54e21407e54a08bd5b98883fe0f42d71078be0388",
+      "esfw0282.bin": "a5b7116dc25f49962354261f7504f944d855723eff954b9d16ab2796e8c9eb64"
+    }
+  },
+  "registry": {
+    "inf": "es0283.inf",
+    "install_section": "ES0283_NTx64_60",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 19,
+    "device_data": {
+      "Model": "EPSON Perfection V39II",
+      "TwainDS": "EPSON Perfection V39II",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "4800,1",
+      "ModelCode": "ES0283",
+      "OptionCaps": "0x100,1",
+      "ExtCmdModule": "esxi0282.dll",
+      "ExtBinModule": "esfw0282.bin"
+    }
+  },
+  "interpreter": "esxi0282.dll",
+  "firmware": {
+    "file": "esfw0282.bin",
+    "protocol": "epson"
+  }
+}

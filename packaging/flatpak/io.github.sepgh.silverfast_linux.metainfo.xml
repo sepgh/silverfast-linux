@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.sepgh.silverfast_linux</id>
+  <name>SilverFast for Linux</name>
+  <summary>Run SilverFast 9 with your USB scanner through Wine</summary>
+  <developer id="io.github.sepgh">
+    <name>sepgh</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <url type="homepage">https://github.com/sepgh/silverfast-linux</url>
+  <url type="bugtracker">https://github.com/sepgh/silverfast-linux/issues</url>
+  <description>
+    <p>
+      An unofficial community project that runs the Windows build of LaserSoft
+      Imaging's SilverFast 9 scanner software under Wine and connects it to
+      USB scanners on Linux.
+    </p>
+    <p>
+      On first start it downloads SilverFast 9 from LaserSoft and your
+      scanner's Windows driver from its manufacturer, after you accept their
+      licence terms. A SilverFast licence (MySilverFast account) is required
+      to scan. The Epson Perfection V600 is the reference scanner; others are
+      described in a scanner catalog and can be added as data.
+    </p>
+    <p>
+      Not affiliated with or endorsed by LaserSoft Imaging or any scanner
+      maker. SilverFast is a trademark of LaserSoft Imaging AG.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.sepgh.silverfast_linux.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Graphics</category>
+    <category>Scanning</category>
+  </categories>
+  <releases>
+    <release version="0.3.0" date="2026-10-28">
+      <description>
+        <p>First Flatpak build; experimental catalog entries for more Epson scanners.</p>
+      </description>
+    </release>
+  </releases>
+</component>

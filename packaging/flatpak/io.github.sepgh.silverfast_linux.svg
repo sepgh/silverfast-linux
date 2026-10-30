@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Generic flatbed scanner; placeholder app icon, free to replace. -->
+  <rect x="10" y="44" width="108" height="56" rx="10" fill="#37474f"/>
+  <rect x="10" y="36" width="108" height="18" rx="8" fill="#546e7a"/>
+  <rect x="20" y="62" width="88" height="26" rx="4" fill="#cfd8dc"/>
+  <rect x="20" y="72" width="88" height="5" fill="#4fc3f7"/>
+  <circle cx="104" cy="45" r="3.5" fill="#81c784"/>
+</svg>

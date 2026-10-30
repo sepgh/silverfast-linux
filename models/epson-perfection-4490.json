@@ -1,0 +1,33 @@
+{
+  "id": "epson-perfection-4490",
+  "name": "EPSON Perfection 4490",
+  "vendor": "EPSON",
+  "usb": "04b8:0119",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/epson13552.exe",
+    "sha256": "cff2f5df8a9c76510b626839eaf0e36d9a85d6bf999bbe7c385a841e29f53f9f",
+    "info": "epson13552.exe, 10/21/2009,3.2.4.1",
+    "files": {
+      "esxuin54.dll": "ac9748aad25b717a118e91f8ff3b66552e75cf24c18aa487b3b52df978d9d99f"
+    }
+  },
+  "registry": {
+    "inf": "es54n.inf",
+    "install_section": "USB.ES54XP.x64",
+    "device_type": 1,
+    "device_subtype": 17,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Perfection 4490",
+      "Model": "EPSON Perfection 4490",
+      "ExtCmdModule": "esxuin54.dll",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "4800,1",
+      "ModelCode": "ES0054"
+    }
+  },
+  "interpreter": "esxuin54.dll"
+}

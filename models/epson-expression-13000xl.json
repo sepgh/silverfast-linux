@@ -1,0 +1,31 @@
+{
+  "id": "epson-expression-13000xl",
+  "name": "EPSON Expression 13000XL",
+  "vendor": "EPSON",
+  "usb": "04b8:018e",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/EXP13000XL_EScan2_67810_AM.exe",
+    "sha256": "a09f5c0df4769fd48cf2fbf8821266f32aace3b2924e369dea880508df6d53f1",
+    "info": "EXP13000XL_EScan2_67810_AM.exe, 01/22/2025,1.1.0.0",
+    "files": {}
+  },
+  "registry": {
+    "inf": "es0256.inf",
+    "install_section": "ES0256_NTx64_60",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 17,
+    "device_data": {
+      "Model": "EPSON Expression 13000XL",
+      "TwainDS": "EPSON Expression 13000XL",
+      "NumButtons": "1,1",
+      "HOptRes": "2400,1",
+      "VOptRes": "4800,1",
+      "ModelCode": "ES0256",
+      "OptionCaps": "0x00,1",
+      "CmdType": "4,1"
+    }
+  }
+}

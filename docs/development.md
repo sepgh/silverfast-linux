@@ -21,6 +21,7 @@ scripts/           silverfast-linux (install/run/doctor/...), components list, t
                      Microsoft Update Catalog search
   sfl-report.py      scanner report and draft catalog entries from Windows drivers
 build-env/         Containerfile with the full toolchain
+packaging/         AUR PKGBUILDs and the Flatpak manifest (see packaging/README.md)
 ```
 
 ## Building
@@ -42,6 +43,9 @@ make test       # unit tests + sti.dll self-test (needs wine and python3)
 `make` checks for the libusb headers (via `pkg-config libusb-1.0`) and for
 `x86_64-w64-mingw32-gcc` before compiling, and stops with a message naming
 the missing piece. Override the compilers with `CC=` and `MINGW_CC=`.
+`sti.dll` is built with its own `MINGW_CFLAGS` (not `CFLAGS`), and the build
+fails if it imports a DLL other than the Windows system and C runtime DLLs —
+a stray `libssp-0.dll` import, for example, stops SilverFast from starting.
 
 Without installing compilers, build inside a container (podman or docker):
 

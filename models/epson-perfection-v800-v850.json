@@ -1,0 +1,34 @@
+{
+  "id": "epson-perfection-v800-v850",
+  "name": "EPSON Perfection V800/V850",
+  "vendor": "EPSON",
+  "usb": "04b8:0151",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/V800_V850_EScan_3937_AM.exe",
+    "sha256": "97bee6a1f0273a464a2d362aeac6ec8a2aaa3ebfa6467db59943176234cf48f9",
+    "info": "V800_V850_EScan_3937_AM.exe, 04/14/2025,1.1.0.0",
+    "files": {
+      "esxintfe.dll": "e5e2754b1effda1eda1cd4d733dc1971cc0c0288966dea6029b7264f82bdece2"
+    }
+  },
+  "registry": {
+    "inf": "esfe.inf",
+    "install_section": "USB.ESFENT6.x64",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Perfection V800/V850",
+      "Model": "EPSON Perfection V800/V850",
+      "NumButtons": "1,1",
+      "HOptRes": "6400,1",
+      "VOptRes": "6400,1",
+      "ModelCode": "ES00FE",
+      "OptionCaps": "0x100,1",
+      "ExtCmdModule": "ESXINTFE.DLL"
+    }
+  },
+  "interpreter": "esxintfe.dll"
+}
