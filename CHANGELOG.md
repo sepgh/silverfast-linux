@@ -14,6 +14,14 @@
 
 ### Changed
 - `install` does not write a desktop entry inside a Flatpak.
+- `run` refreshes the prefix's `sti.dll` when the installed one changed, so
+  upgrades no longer need a re-install for that.
+
+### Fixed
+- `sti.dll` no longer picks up native hardening flags from the build
+  environment (Flatpak/distro `CFLAGS`), which made it import `libssp-0.dll`
+  and stopped SilverFast from starting. The build now fails if `sti.dll`
+  imports anything Windows does not provide.
 
 ## 0.2.0 — 2026-10-28
 

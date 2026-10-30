@@ -408,6 +408,8 @@ cmd_run() {
     usb=$(field "$id" usb)
     if ! scanner_node "$usb" >/dev/null; then warn "$(field "$id" name) is not connected; SilverFast will start without it"
     elif ! usb_access_ok "$usb"; then warn "no permission to use the scanner; run 'silverfast-linux udev' for the fix"; fi
+    # Keep the prefix's sti.dll in step with this installation (upgrades).
+    cmp -s "$STI_DLL" "$SYSTEM32/sti.dll" || install -m644 "$STI_DLL" "$SYSTEM32/sti.dll"
     mapfile -t args < <(helper_args_for "$id")
     start_helper "$LOG_DIR" "${args[@]}"
     launch_silverfast "$LOG_DIR" "$@"
