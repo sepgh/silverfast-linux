@@ -4,7 +4,7 @@
 # docs/how-it-works.md.
 set -euo pipefail
 
-VERSION=0.2.0
+VERSION=0.3.0
 
 # --- locations -------------------------------------------------------------
 DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}

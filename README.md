@@ -90,10 +90,10 @@ connected. If you own one, please try it and report back — see
 with glibc 2.34 or newer (Ubuntu 22.04, Debian 12, Fedora 35 and later):
 
 ```sh
-curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.2.0/silverfast-linux-0.2.0-x86_64.tar.gz
-curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.2.0/SHA256SUMS
+curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.3.0/silverfast-linux-0.3.0-x86_64.tar.gz
+curl -LO https://github.com/sepgh/silverfast-linux/releases/download/v0.3.0/SHA256SUMS
 sha256sum -c SHA256SUMS
-tar -xzf silverfast-linux-0.2.0-x86_64.tar.gz -C ~/.local --strip-components=1
+tar -xzf silverfast-linux-0.3.0-x86_64.tar.gz -C ~/.local --strip-components=1
 ```
 
 Upgrading from an earlier release: extract the new tarball the same way, then

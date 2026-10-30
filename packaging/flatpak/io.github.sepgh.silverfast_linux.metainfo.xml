@@ -35,7 +35,7 @@
     <category>Scanning</category>
   </categories>
   <releases>
-    <release version="0.3.0" date="2026-10-28">
+    <release version="0.3.0" date="2026-10-30">
       <description>
         <p>First Flatpak build; experimental catalog entries for more Epson scanners.</p>
       </description>
