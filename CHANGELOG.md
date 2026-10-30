@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-30
 
 ### Added
 - Experimental catalog entries for more Epson scanners that SilverFast 9
