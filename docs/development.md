@@ -21,6 +21,7 @@ scripts/           silverfast-linux (install/run/doctor/...), components list, t
                      Microsoft Update Catalog search
   sfl-report.py      scanner report and draft catalog entries from Windows drivers
 build-env/         Containerfile with the full toolchain
+packaging/         AUR PKGBUILDs and the Flatpak manifest (see packaging/README.md)
 ```
 
 ## Building

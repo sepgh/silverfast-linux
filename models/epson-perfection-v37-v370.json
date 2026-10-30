@@ -1,0 +1,40 @@
+{
+  "id": "epson-perfection-v37-v370",
+  "name": "EPSON Perfection V37/V370",
+  "vendor": "EPSON",
+  "usb": "04b8:014a",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/V37_V370_EScan_3927_AM.exe",
+    "sha256": "8a92ffdb7c430bf9408b670604b2d7f26da0f9a5a46f301c41633df02279916d",
+    "info": "V37_V370_EScan_3927_AM.exe, 09/09/2025,3.9.2.7",
+    "files": {
+      "esxuindd.dll": "fa079793046e142b45ff301b55056cfbd3c741c813a742a0bc884f2dc907e531",
+      "esfwdd.bin": "2fec0d33ff64a98c84fa8c4e17fd64d8121ec10cab39333a53d49d21743dd954"
+    }
+  },
+  "registry": {
+    "inf": "esdd.inf",
+    "install_section": "ES00DD_NTx64_60",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 19,
+    "device_data": {
+      "Model": "EPSON Perfection V37/V370",
+      "TwainDS": "EPSON Perfection V37/V370",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "9600,1",
+      "ModelCode": "ES00DD",
+      "OptionCaps": "0x900,1",
+      "ExtCmdModule": "esxuindd.dll",
+      "ExtBinModule": "esfwdd.bin"
+    }
+  },
+  "interpreter": "esxuindd.dll",
+  "firmware": {
+    "file": "esfwdd.bin",
+    "protocol": "epson"
+  }
+}

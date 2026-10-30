@@ -1,0 +1,33 @@
+# Maintainer: sepgh <13250403+sepgh@users.noreply.github.com>
+pkgname=silverfast-linux
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Run SilverFast 9 (Windows) with USB scanners on Linux through Wine (unofficial)"
+arch=('x86_64')
+url="https://github.com/sepgh/silverfast-linux"
+license=('MIT')
+depends=('wine' 'libusb' 'python' 'curl' '7zip')
+makedepends=('gcc' 'make' 'pkgconf' 'mingw-w64-gcc')
+optdepends=('sane: lets "silverfast-linux report" include what SANE sees')
+provides=('silverfast-linux')
+conflicts=('silverfast-linux-bin')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('1708f2447ac0df5ca856a862f50ac3ad1f3e50ba7ad311668ab189649c5ea0e3')
+
+build() {
+  cd "$pkgname-$pkgver"
+  make
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  # The sti.dll self-test needs a Wine prefix and is left to CI.
+  make test-helper test-report
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  make install DESTDIR="$pkgdir" PREFIX=/usr
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+  install -Dm644 README.md CHANGELOG.md -t "$pkgdir/usr/share/doc/$pkgname"
+}

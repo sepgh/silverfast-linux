@@ -1,0 +1,29 @@
+{
+  "id": "epson-expression-1680",
+  "name": "EPSON Expression 1680",
+  "vendor": "EPSON",
+  "usb": "04b8:010e",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/epson12203.exe",
+    "sha256": "5a277b02a8be9a71114cc123d9fde144725be4789d815896c9794208c19cc75f",
+    "info": "epson12203.exe, 11/30/2006,3.0.4.0",
+    "files": {}
+  },
+  "registry": {
+    "inf": "es1bn.inf",
+    "install_section": "USB.ES1BXP.x64",
+    "device_type": 1,
+    "device_subtype": 1,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Expression 1680",
+      "Model": "EPSON Expression 1680",
+      "NumButtons": "1,1",
+      "HOptRes": "1600,1",
+      "VOptRes": "1600,1",
+      "ModelCode": "ES001B"
+    }
+  }
+}

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Entry point of the Flatpak. With arguments it is plain silverfast-linux
+# ("flatpak run io.github.sepgh.silverfast_linux doctor"). Without arguments,
+# as when started from the desktop menu, it guides the first setup with
+# Windows-style dialogs (Wine's script host, so no extra toolkit is needed)
+# and then starts SilverFast.
+set -euo pipefail
+
+SFL=/app/bin/silverfast-linux
+[ $# -gt 0 ] && exec "$SFL" "$@"
+
+DATA=${XDG_DATA_HOME:-$HOME/.local/share}/silverfast-linux
+LOGS=$DATA/logs
+export WINEPREFIX=$DATA/prefix WINEDEBUG=-all WINEDLLOVERRIDES="mscoree,mshtml=;winemenubuilder.exe=d"
+mkdir -p "$LOGS"
+
+# dialog yesno|info|warn TITLE TEXT: returns 0 for "Yes"/"OK", 1 otherwise.
+dialog() {
+    local kind=$1 title=$2 text=$3 vbs flags rc=0
+    case $kind in yesno) flags="4 + 32" ;; warn) flags="0 + 48" ;; *) flags="0 + 64" ;; esac
+    vbs=$(mktemp --suffix=.vbs)
+    text=${text//\"/\"\"}
+    text=${text//$'\n'/\" \& vbCrLf \& \"}
+    printf 'r = CreateObject("WScript.Shell").Popup("%s", 0, "%s", %s)\nWScript.Quit(r)\n' "$text" "$title" "$flags" > "$vbs"
+    wine wscript.exe "$(winepath -w "$vbs")" >/dev/null 2>&1 || rc=$?
+    rm -f "$vbs"
+    [ "$rc" = 6 ] || [ "$rc" = 1 ]
+}
+
+# A message that stays up while a long step runs; closed by stop_notice.
+start_notice() {
+    local vbs; vbs=$(mktemp --suffix=.vbs)
+    printf 'CreateObject("WScript.Shell").Popup "%s", 0, "SilverFast for Linux", 64\n' "$1" > "$vbs"
+    wine wscript.exe "$(winepath -w "$vbs")" >/dev/null 2>&1 &
+}
+stop_notice() { wine taskkill /f /im wscript.exe >/dev/null 2>&1 || true; }
+
+if [ ! -s "$DATA/scanners.txt" ]; then
+    [ -f "$WINEPREFIX/system.reg" ] || wineboot -i >/dev/null 2>&1
+    dialog yesno "SilverFast for Linux - first start" "This app runs SilverFast 9 for Windows under Wine and connects it to your scanner.
+
+It will now download proprietary software directly from its vendors:
+ - SilverFast 9 by LaserSoft Imaging AG (www.silverfast.com)
+ - your scanner's Windows driver from its manufacturer
+
+Using it means accepting their licence terms. You need your own MySilverFast licence to scan. This project is not affiliated with LaserSoft Imaging or the scanner makers.
+
+The download is about 300 MB and takes a few minutes. Continue?" || exit 0
+    start_notice "Setting up SilverFast. This takes a few minutes; SilverFast starts by itself when done."
+    if ! "$SFL" install --accept-vendor-licenses >"$LOGS/install.log" 2>&1; then
+        stop_notice
+        dialog warn "SilverFast for Linux" "Setup failed. Details are in:
+$LOGS/install.log
+
+Please check your network connection and try again, or report the problem at github.com/sepgh/silverfast-linux/issues."
+        exit 1
+    fi
+    stop_notice
+fi
+
+# USB access needs a udev rule on the host, which a Flatpak cannot install.
+if "$SFL" doctor 2>&1 | grep -q ': accessible —'; then
+    "$SFL" udev > "$DATA/usb-access.txt"
+    dialog info "SilverFast for Linux - scanner access" "Your scanner is connected, but this user may not open it yet. Linux needs a one-time permission rule for that.
+
+The next window shows two commands; run them once in a terminal, then switch the scanner off and on."
+    wine notepad.exe "$(winepath -w "$DATA/usb-access.txt")" >/dev/null 2>&1 || true
+fi
+
+exec "$SFL" run

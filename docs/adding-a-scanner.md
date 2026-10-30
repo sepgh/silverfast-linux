@@ -146,7 +146,17 @@ Scanners are data: one JSON file per model in `models/`
 ([format](../models/README.md)); the installer, launcher, udev rules and
 helper read everything from there.
 
-1. Copy the report's **Draft catalog entry** to `models/<id>.json`.
+1. Copy the report's **Draft catalog entry** to `models/<id>.json`. Without
+   a report (or without the hardware), generate it from the driver package:
+
+   ```sh
+   scripts/sfl-report.py --driver-ids --driver PACKAGE.exe          # USB IDs it covers
+   scripts/sfl-report.py --draft-only --device VID:PID --driver PACKAGE.exe \
+       --driver-url https://… > models/<id>.json
+   ```
+
+   Then check that SilverFast offers the model for Windows 10/11 and that the
+   interpreter (if any) is a 64-bit DLL.
 2. Set `driver.url` to the official download link if the draft lacks it.
 3. Leave `status: experimental` and run `make test-report`, which validates
    every model file.

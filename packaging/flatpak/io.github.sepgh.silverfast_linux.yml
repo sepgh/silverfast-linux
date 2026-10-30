@@ -1,0 +1,48 @@
+# Flatpak build of silverfast-linux on top of Flathub's Wine (org.winehq.Wine).
+# Build and install locally (see packaging/flatpak/README.md):
+#   flatpak run org.flatpak.Builder --user --install --force-clean \
+#       --install-deps-from=flathub build-dir packaging/flatpak/io.github.sepgh.silverfast_linux.yml
+id: io.github.sepgh.silverfast_linux
+base: org.winehq.Wine
+base-version: stable-26.08
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.mingw-w64
+command: silverfast-linux-flatpak
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=wayland
+  # USB access to the scanner (the host still needs the udev rule).
+  - --device=all
+  # SilverFast and scanner drivers are downloaded from their vendors.
+  - --share=network
+  - --allow=multiarch
+  # Places to save scans; Z:\home\<you>\Pictures in SilverFast's dialogs.
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --env=WINEDEBUG=-all
+
+modules:
+  - name: silverfast-linux
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/mingw-w64/bin
+    build-commands:
+      - make PREFIX=/app
+      - make install PREFIX=/app
+      - install -Dm755 packaging/flatpak/silverfast-linux-flatpak -t /app/bin
+      - install -Dm644 packaging/flatpak/io.github.sepgh.silverfast_linux.desktop -t /app/share/applications
+      - install -Dm644 packaging/flatpak/io.github.sepgh.silverfast_linux.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 packaging/flatpak/io.github.sepgh.silverfast_linux.svg -t /app/share/icons/hicolor/scalable/apps
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - build
+          - build-release
+          - .flatpak-builder

@@ -1,0 +1,33 @@
+{
+  "id": "epson-perfection-v10-v100",
+  "name": "EPSON Perfection V10/V100",
+  "vendor": "EPSON",
+  "usb": "04b8:012d",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/epson13833.exe",
+    "sha256": "f0ab1242f4f0e344fa50718ccaa020b83a09887872c51d1332186167c6417bb5",
+    "info": "epson13833.exe, 02/12/2010,3.2.4.4",
+    "files": {
+      "esxuin66.dll": "a04e6a201875684862dd4a46b9a17e211aff444e62db84c74c1fb8ac8c98fe16"
+    }
+  },
+  "registry": {
+    "inf": "es66n.inf",
+    "install_section": "USB.ES66XP.x64",
+    "device_type": 1,
+    "device_subtype": 17,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Perfection V10/V100",
+      "Model": "EPSON Perfection V10/V100",
+      "ExtCmdModule": "esxuin66.dll",
+      "NumButtons": "4,1",
+      "HOptRes": "3200,1",
+      "VOptRes": "3200,1",
+      "ModelCode": "ES0066"
+    }
+  },
+  "interpreter": "esxuin66.dll"
+}

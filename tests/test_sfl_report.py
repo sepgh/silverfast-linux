@@ -3,6 +3,7 @@
 import importlib.util
 import os
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("sfl_report", os.path.join(HERE, "..", "scripts", "sfl-report.py"))
@@ -67,6 +68,43 @@ class InfTests(unittest.TestCase):
         self.assertTrue(report.is_candidate(dev(0x07, "usblp")))
         self.assertFalse(report.is_candidate(dev(0xff, "r8152")))
         self.assertFalse(report.is_candidate(dev(0x03, "usbhid")))
+
+
+class DriverAnalysisTests(unittest.TestCase):
+    UTILITY = r"""[Version]
+Class=USB
+Provider=EPSON
+[Manufacturer]
+EPSON=M,NTamd64.6.0
+[M.NTamd64.6.0]
+"EPSON Scanner Utility 0999" = UTIL, USB\VID_04B8&PID_0999
+[UTIL]
+"""
+
+    def analyse(self, infs):
+        import tempfile, shutil
+        work = tempfile.mkdtemp()
+        try:
+            for name, text in infs.items():
+                with open(os.path.join(work, name), "w") as f:
+                    f.write(text)
+            with mock.patch.object(report.catalog, "extract_recursive", lambda src, dest: None), \
+                 mock.patch.object(report.catalog, "index_files",
+                                   lambda root: {n: os.path.join(work, n) for n in infs}), \
+                 mock.patch.object(report.catalog, "sha256_file", lambda p: "0" * 64), \
+                 mock.patch.object(report.os.path, "getsize", lambda p: 1), \
+                 mock.patch("builtins.open", wraps=open) as _:
+                return report.analyse_driver(os.path.join(work, list(infs)[0]), "04b8", "0999")[1]
+        finally:
+            shutil.rmtree(work)
+
+    def test_image_class_inf_wins_over_utility_inf(self):
+        image = INF.replace("Class=Image", "Class=Image")
+        for order in (("a_scanner.inf", "z_utility.inf"), ("z_scanner.inf", "a_utility.inf")):
+            infs = {order[0]: image, order[1]: self.UTILITY}
+            model = self.analyse(infs)
+            self.assertEqual(model["name"], "EPSON Test Scanner", order)
+            self.assertEqual(model["registry"]["device_data"]["ModelCode"], "ES0999")
 
 
 if __name__ == "__main__":

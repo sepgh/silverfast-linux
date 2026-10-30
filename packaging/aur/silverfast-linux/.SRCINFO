@@ -1,0 +1,23 @@
+pkgbase = silverfast-linux
+	pkgdesc = Run SilverFast 9 (Windows) with USB scanners on Linux through Wine (unofficial)
+	pkgver = 0.2.0
+	pkgrel = 1
+	url = https://github.com/sepgh/silverfast-linux
+	arch = x86_64
+	license = MIT
+	makedepends = gcc
+	makedepends = make
+	makedepends = pkgconf
+	makedepends = mingw-w64-gcc
+	depends = wine
+	depends = libusb
+	depends = python
+	depends = curl
+	depends = 7zip
+	optdepends = sane: lets "silverfast-linux report" include what SANE sees
+	provides = silverfast-linux
+	conflicts = silverfast-linux-bin
+	source = silverfast-linux-0.2.0.tar.gz::https://github.com/sepgh/silverfast-linux/archive/refs/tags/v0.2.0.tar.gz
+	sha256sums = 1708f2447ac0df5ca856a862f50ac3ad1f3e50ba7ad311668ab189649c5ea0e3
+
+pkgname = silverfast-linux

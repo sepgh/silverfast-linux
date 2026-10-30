@@ -47,10 +47,32 @@ developed and tested on it, and it works end to end.
 | SilverFast edition | Whatever your MySilverFast account unlocks (tested with SE) |
 | Tested on | Fedora 43, Wine 11 (Staging) with the scanner; CI covers Ubuntu 24.04, Wine 9 |
 
-Today the catalog's only confirmed entry is the V600. Other scanners that
-SilverFast supports on Windows are likely to work the same way — check
-`silverfast-linux scanners`, try yours with `silverfast-linux try-scanner`, and
-[help add it](#want-support-for-your-scanner).
+### Scanners
+
+| Scanner | USB ID | Status |
+|---|---|---|
+| Epson Perfection V600 | `04b8:013a` | **supported** — reference scanner |
+| Epson Expression 13000XL | `04b8:018e` | experimental |
+| Epson Expression 1640XL | `04b8:0109` | experimental |
+| Epson Expression 1680 | `04b8:010e` | experimental |
+| Epson Perfection 4490 | `04b8:0119` | experimental |
+| Epson Perfection V10/V100 | `04b8:012d` | experimental |
+| Epson Perfection V200 | `04b8:012e` | experimental |
+| Epson Perfection V30/V300 | `04b8:0131` | experimental |
+| Epson Perfection V33/V330 | `04b8:0142` | experimental |
+| Epson Perfection V350 | `04b8:012f` | experimental |
+| Epson Perfection V37/V370 | `04b8:014a` | experimental |
+| Epson Perfection V39 | `04b8:013d` | experimental |
+| Epson Perfection V39II | `04b8:013f` | experimental |
+| Epson Perfection V550 | `04b8:013b` | experimental |
+| Epson Perfection V800/V850 | `04b8:0151` | experimental |
+
+*Experimental* entries were generated from Epson's Windows 10/11 drivers for
+models SilverFast 9 supports on Windows 10/11; nobody has confirmed them with
+the hardware yet. They are installed automatically when the scanner is
+connected. If you own one, please try it and report back — see
+[Want support for your scanner?](#want-support-for-your-scanner).
+`silverfast-linux scanners` shows the current catalog.
 
 ## Quick start
 
@@ -82,7 +104,16 @@ This puts `silverfast-linux` in `~/.local/bin` (make sure it is on your
 `PATH`) and its files in `~/.local/lib/silverfast-linux`. All releases are on
 the [releases page](https://github.com/sepgh/silverfast-linux/releases).
 
-**Option B — build from source.**
+**Option B — Arch Linux (AUR).** Packages `silverfast-linux` (builds from
+source) and `silverfast-linux-bin` (prebuilt) are prepared in
+[packaging/aur](packaging/README.md#aur) and not yet published to the AUR;
+until then, build one with `makepkg -si` in its directory.
+
+**Option C — Flatpak.** Built on Flathub's Wine; it guides the first setup
+with dialogs. Not on Flathub yet — build it locally as described in
+[packaging/flatpak](packaging/flatpak/README.md).
+
+**Option D — build from source.**
 
 ```sh
 git clone https://github.com/sepgh/silverfast-linux.git
@@ -323,6 +354,7 @@ If you own another scanner and want to help test, please open an issue.
 - [Scanner catalog](models/README.md) — the model file format
 - [Changelog](CHANGELOG.md)
 - [Development](docs/development.md) — building, tests, debugging, layout
+- [Packaging](packaging/README.md) — AUR and Flatpak
 - Design notes: [v1](docs/superpowers/specs/2026-10-27-silverfast-linux-v1-design.md),
   [scanner catalog](docs/superpowers/specs/2026-10-28-scanner-catalog-design.md)
 - [Future plan](docs/plans/future-pure-wine-and-more-scanners.md)

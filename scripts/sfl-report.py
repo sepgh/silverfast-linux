@@ -245,7 +245,13 @@ def analyse_driver(path, vid, pid, keep_dir=None, url=None):
             vendor = subst(ver.get("provider", ""), strings).strip('"')
             device_data = {a: unquote(subst(b, strings))
                            for a, b in keyvals(sections.get(info.get("devicedata", "").lower(), []))}
+            # Packages can also carry utility INFs that list every USB ID; the
+            # still-image driver INF (Class=Image) is the one Windows binds.
+            is_image = ver.get("class", "").strip('"').lower() == "image"
+            if model and model.get("_image_class") and not is_image:
+                continue
             model.update({
+                "_image_class": is_image,
                 "id": slug(best[1]), "name": best[1], "vendor": vendor, "usb": f"{vid}:{pid}",
                 "status": "experimental",
                 "tested": "not yet",
@@ -323,11 +329,42 @@ def main():
     ap.add_argument("--model-json", help="also write the draft catalog entry (models/README.md) to this file")
     ap.add_argument("--driver-url", help="where the driver package was downloaded from (recorded in the draft)")
     ap.add_argument("--list-candidates", action="store_true", help="only print VID:PID of likely scanners")
+    ap.add_argument("--driver-ids", action="store_true",
+                    help="print the USB IDs (VID:PID) the --driver package's INF files cover")
+    ap.add_argument("--draft-only", action="store_true",
+                    help="print only the draft catalog entry for --device from --driver; the scanner "
+                         "does not need to be connected (used to prepare experimental entries)")
     ap.add_argument("--keep-files", help="copy the driver's interpreter/firmware into this directory")
     args = ap.parse_args()
 
     if args.list_candidates:
         print("\n".join(f"{d['vid']}:{d['pid']}" for d in usb_devices() if is_candidate(d)))
+        return 0
+
+    if args.driver_ids:
+        work = tempfile.mkdtemp(prefix="sfl-report-")
+        try:
+            catalog.extract_recursive(args.driver, work)
+            ids = set()
+            for name, path in catalog.index_files(work).items():
+                if name.endswith(".inf"):
+                    text = decode_inf(open(path, "rb").read()).lower()
+                    ids.update(f"{v}:{p}" for v, p in re.findall(r"usb\\vid_([0-9a-f]{4})&pid_([0-9a-f]{4})", text))
+            print("\n".join(sorted(ids)))
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        return 0
+
+    if args.draft_only:
+        if not (args.device and args.driver):
+            ap.error("--draft-only needs --device VID:PID and --driver")
+        vid, _, pid = args.device.lower().partition(":")
+        _, model = analyse_driver(args.driver, vid, pid, args.keep_files, args.driver_url)
+        draft = {k: v for k, v in model.items() if not k.startswith("_")}
+        if not draft:
+            print(f"error: no INF in {os.path.basename(args.driver)} covers {args.device}", file=sys.stderr)
+            return 1
+        print(json.dumps(draft, indent=2))
         return 0
 
     out = [f"# silverfast-linux scanner report\n",

@@ -1,0 +1,33 @@
+{
+  "id": "epson-perfection-v30-v300",
+  "name": "EPSON Perfection V30/V300",
+  "vendor": "EPSON",
+  "usb": "04b8:0131",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/epson13534.exe",
+    "sha256": "c455b13c4a91c148ac18b303043046c170a80e09c9bc0f8e9c8034e0859eeed5",
+    "info": "epson13534.exe, 06/17/2009,3.5.0.4",
+    "files": {
+      "esxuin8b.dll": "9aabfc819a5da32e36331bb567ef2ee95c74e5735b2acc3964074204e15867bf"
+    }
+  },
+  "registry": {
+    "inf": "es8bn.inf",
+    "install_section": "USB.ES8BXP.x64",
+    "device_type": 1,
+    "device_subtype": 17,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Perfection V30/V300",
+      "Model": "EPSON Perfection V30/V300",
+      "ExtCmdModule": "esxuin8b.dll",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "9600,1",
+      "ModelCode": "ES008B"
+    }
+  },
+  "interpreter": "esxuin8b.dll"
+}

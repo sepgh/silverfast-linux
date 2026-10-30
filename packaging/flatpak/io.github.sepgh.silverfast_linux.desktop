@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SilverFast for Linux
+GenericName=Scanner software
+Comment=Run SilverFast 9 with your USB scanner through Wine (unofficial)
+Exec=silverfast-linux-flatpak
+Icon=io.github.sepgh.silverfast_linux
+Categories=Graphics;Scanning;
+Keywords=scanner;scan;film;photo;SilverFast;Epson;
+Terminal=false
+StartupNotify=true

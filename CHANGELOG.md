@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Experimental catalog entries for more Epson scanners that SilverFast 9
+  supports on Windows 10/11, generated from Epson's Windows drivers (not yet
+  confirmed with hardware; installed only when connected).
+- `sfl-report.py --driver-ids` and `--draft-only`: list the USB IDs a driver
+  package covers and build a catalog entry without the scanner attached.
+- Packaging: AUR packages (`silverfast-linux`, `silverfast-linux-bin`) and a
+  Flatpak (`io.github.sepgh.silverfast_linux`) built on Flathub's Wine, with
+  a first-start setup dialog.
+
+### Changed
+- `install` does not write a desktop entry inside a Flatpak.
+
 ## 0.2.0 — 2026-10-28
 
 ### Added

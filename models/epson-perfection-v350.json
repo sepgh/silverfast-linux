@@ -1,0 +1,33 @@
+{
+  "id": "epson-perfection-v350",
+  "name": "EPSON Perfection V350",
+  "vendor": "EPSON",
+  "usb": "04b8:012f",
+  "status": "experimental",
+  "tested": "Generated from Epson's Windows driver; not yet tested with this scanner",
+  "driver": {
+    "url": "https://ftp.epson.com/drivers/epson13832.exe",
+    "sha256": "0c7b864c33da3bd3f47b1057cc62e4c7b33f3d19e5757eab4bc78161c0b638f5",
+    "info": "epson13832.exe, 02/12/2010,3.2.4.3",
+    "files": {
+      "esxuin68.dll": "1287060757d55e7d66a7eb21b0c4e9ced1593cf3fafda7489942d5da6bb83069"
+    }
+  },
+  "registry": {
+    "inf": "es68n.inf",
+    "install_section": "USB.ES68XP.x64",
+    "device_type": 1,
+    "device_subtype": 17,
+    "capabilities": 19,
+    "device_data": {
+      "TwainDS": "EPSON Perfection V350",
+      "Model": "EPSON Perfection V350",
+      "ExtCmdModule": "esxuin68.dll",
+      "NumButtons": "4,1",
+      "HOptRes": "4800,1",
+      "VOptRes": "4800,1",
+      "ModelCode": "ES0068"
+    }
+  },
+  "interpreter": "esxuin68.dll"
+}
