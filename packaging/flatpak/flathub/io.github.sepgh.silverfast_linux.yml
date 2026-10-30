@@ -1,0 +1,46 @@
+# Flathub manifest: builds the tagged release. Copy this file to the root of
+# the Flathub submission (see packaging/flatpak/README.md, "Publishing on Flathub").
+id: io.github.sepgh.silverfast_linux
+base: org.winehq.Wine
+base-version: stable-26.08
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.mingw-w64
+command: silverfast-linux-flatpak
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  # USB access to the scanner (the host still needs the udev rule).
+  - --device=all
+  # SilverFast and scanner drivers are downloaded from their vendors.
+  - --share=network
+  - --allow=multiarch
+  # Places to save scans; Z:\home\<you>\Pictures in SilverFast's dialogs.
+  - --filesystem=xdg-pictures
+  - --filesystem=xdg-documents
+  - --filesystem=xdg-download
+  - --env=WINEDEBUG=-all
+
+modules:
+  - name: silverfast-linux
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/mingw-w64/bin
+    build-commands:
+      - make PREFIX=/app
+      - make install PREFIX=/app
+      - install -Dm755 packaging/flatpak/silverfast-linux-flatpak -t /app/bin
+      - install -Dm644 packaging/flatpak/io.github.sepgh.silverfast_linux.desktop -t /app/share/applications
+      - install -Dm644 packaging/flatpak/io.github.sepgh.silverfast_linux.metainfo.xml -t /app/share/metainfo
+      - install -Dm644 packaging/flatpak/io.github.sepgh.silverfast_linux.svg -t /app/share/icons/hicolor/scalable/apps
+    sources:
+      - type: git
+        url: https://github.com/sepgh/silverfast-linux.git
+        tag: v0.3.0
+        commit: f76549262bf120a2226f459c6c0db9d6eaa4eeda
+        x-checker-data:
+          type: git
+          tag-pattern: ^v([\d.]+)$

@@ -1,6 +1,6 @@
 # Maintainer: sepgh <13250403+sepgh@users.noreply.github.com>
 pkgname=silverfast-linux
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Run SilverFast 9 (Windows) with USB scanners on Linux through Wine (unofficial)"
 arch=('x86_64')
@@ -12,7 +12,7 @@ optdepends=('sane: lets "silverfast-linux report" include what SANE sees')
 provides=('silverfast-linux')
 conflicts=('silverfast-linux-bin')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('1708f2447ac0df5ca856a862f50ac3ad1f3e50ba7ad311668ab189649c5ea0e3')
+sha256sums=('1dad288377d91d172795fce31cfab42f5849bf54feaccc506b4859f3dfd9754c')
 
 build() {
   cd "$pkgname-$pkgver"
