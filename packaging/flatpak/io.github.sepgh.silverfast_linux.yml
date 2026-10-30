@@ -15,7 +15,6 @@ command: silverfast-linux-flatpak
 finish-args:
   - --share=ipc
   - --socket=x11
-  - --socket=wayland
   # USB access to the scanner (the host still needs the udev rule).
   - --device=all
   # SilverFast and scanner drivers are downloaded from their vendors.
